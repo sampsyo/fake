@@ -37,7 +37,17 @@ impl Resource for StringResource {
     }
 }
 
+#[derive(Default)]
 pub struct Driver {
-    states: PrimaryMap<State, StateData>,
-    ops: PrimaryMap<Operation, OpData>,
+    pub states: PrimaryMap<State, StateData>,
+    pub ops: PrimaryMap<Operation, OpData>,
+}
+
+impl Driver {
+    pub fn add_state(&mut self, name: &str, extensions: &[&str]) -> State {
+        self.states.push(StateData {
+            name: name.to_string(),
+            extensions: extensions.iter().map(|s| s.to_string()).collect(),
+        })
+    }
 }
