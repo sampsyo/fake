@@ -53,13 +53,7 @@ impl Driver {
         })
     }
 
-    pub fn add_op(
-        &mut self,
-        name: &str,
-        input: State,
-        output: State,
-        call: OpCall,
-    ) -> Operation {
+    pub fn add_op(&mut self, name: &str, input: State, output: State, call: OpCall) -> Operation {
         self.ops.push(OpData {
             name: name.to_string(),
             input,
