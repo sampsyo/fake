@@ -1,8 +1,6 @@
-use fake::DriverBuilder;
+use fake::{Driver, DriverBuilder};
 
-fn main() {
-    println!("Hello, world!");
-
+fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
 
     let dahlia = bld.state("dahlia", &["fuse"]);
@@ -25,11 +23,10 @@ fn main() {
     bld.op("compile Dahlia", dahlia, calyx, |_| unimplemented!());
     bld.op("compile MrXL", mrxl, calyx, |_| unimplemented!());
 
-    let driver = bld.build();
-    let seq = driver.plan(dahlia, verilog).unwrap();
-    for step in seq {
-        println!("{}: {}", step, driver.ops[step].name);
-    }
+    bld.build()
+}
 
+fn main() {
+    let driver = build_driver();
     driver.main();
 }

@@ -59,5 +59,13 @@ pub fn cli(driver: &Driver) {
         eprintln!("error: {}", e);
         std::process::exit(1);
     });
-    dbg!(req);
+    dbg!(&req);
+
+    let seq = driver.plan(req.input, req.output).unwrap_or_else(|| {
+        eprintln!("error: could not find path");
+        std::process::exit(1);
+    });
+    for step in seq {
+        println!("{}: {}", step, driver.ops[step].name);
+    }
 }
