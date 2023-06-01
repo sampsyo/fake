@@ -143,3 +143,9 @@ impl DriverBuilder {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct Request {
+    pub input: State,
+    pub output: State,
+}

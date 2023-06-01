@@ -1,4 +1,4 @@
-use crate::{Driver, State};
+use crate::{Driver, State, Request};
 use argh::FromArgs;
 use std::path::PathBuf;
 
@@ -41,10 +41,19 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
     }
 }
 
+fn get_request(driver: &Driver, args: &FakeArgs) -> Result<Request> {
+    Ok(Request {
+        input: from_state(driver, args)?,
+        output: to_state(driver, args)?,
+    })
+}
+
 pub fn cli(driver: &Driver) {
     let args: FakeArgs = argh::from_env();
 
-    let from = from_state(driver, &args);
-    let to = to_state(driver, &args);
-    dbg!(from, to);
+    let req = get_request(driver, &args).unwrap_or_else(|e| {
+        eprintln!("error: {}", e);
+        std::process::exit(1);
+    });
+    dbg!(req);
 }
