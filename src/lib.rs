@@ -98,14 +98,20 @@ impl Driver {
         op_path.reverse();
         Some(op_path)
     }
-    
+
     pub fn guess_state(&self, path: &Path) -> Option<State> {
         let ext = path.extension()?.to_str()?;
-        self.states.iter().find(|(_, state_data)| state_data.ext_matches(ext)).map(|(state, _)| state)
+        self.states
+            .iter()
+            .find(|(_, state_data)| state_data.ext_matches(ext))
+            .map(|(state, _)| state)
     }
-    
+
     pub fn get_state(&self, name: &str) -> Option<State> {
-        self.states.iter().find(|(_, state_data)| state_data.name == name).map(|(state, _)| state)
+        self.states
+            .iter()
+            .find(|(_, state_data)| state_data.name == name)
+            .map(|(state, _)| state)
     }
 
     pub fn main(&self) {
