@@ -2,8 +2,8 @@ use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
 
 /// The details about a given state.
 pub struct StateData {
-    name: String,
-    extensions: Vec<String>,
+    pub name: String,
+    pub extensions: Vec<String>,
 }
 /// A reference to a state.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
@@ -14,10 +14,10 @@ type OpCall = fn(&dyn Resource) -> &dyn Resource;
 
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
-    name: String,
-    input: State,
-    output: State,
-    call: OpCall,
+    pub name: String,
+    pub input: State,
+    pub output: State,
+    pub call: OpCall,
 }
 
 /// A reference to an operation.
@@ -65,7 +65,6 @@ impl Driver {
     pub fn plan(&self, input: State, output: State) -> Option<Vec<Operation>> {
         // Our start state is the input.
         let mut visited = SecondaryMap::<State, bool>::new();
-        let mut cur_state = input;
         visited[input] = true;
 
         // Build the incoming edges for each vertex.
@@ -84,9 +83,9 @@ impl Driver {
             // Traverse any edge from the current state to an unvisited state.
             for (op, opdata) in self.ops.iter() {
                 if opdata.input == cur_state && !visited[opdata.output] {
-                    state_queue.push(cur_state);
-                    visited[cur_state] = true;
-                    breadcrumbs[cur_state] = Some(op);
+                    state_queue.push(opdata.output);
+                    visited[opdata.output] = true;
+                    breadcrumbs[opdata.output] = Some(op);
                 }
             }
         }

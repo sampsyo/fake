@@ -24,4 +24,9 @@ fn main() {
     );
     driver.add_op("compile Dahlia", dahlia, calyx, |_| unimplemented!());
     driver.add_op("compile MrXL", mrxl, calyx, |_| unimplemented!());
+
+    let seq = driver.plan(dahlia, verilog).unwrap();
+    for step in seq {
+        println!("{}: {}", step, driver.ops[step].name);
+    }
 }
