@@ -1,4 +1,4 @@
-use crate::Driver;
+use crate::{Driver, State};
 use argh::FromArgs;
 use std::path::PathBuf;
 
@@ -12,9 +12,39 @@ struct FakeArgs {
     /// the output file
     #[argh(option, short = 'o')]
     output: Option<PathBuf>,
+
+    /// the state to start from
+    #[argh(option)]
+    from: Option<String>,
+
+    /// the state to produce
+    #[argh(option)]
+    to: Option<String>,
+}
+
+type Result<T> = std::result::Result<T, &'static str>;
+
+fn from_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
+    match &args.from {
+        Some(name) => driver.get_state(&name).ok_or("unknown --from state"),
+        None => driver.guess_state(&args.input).ok_or("could not infer input state"),
+    }
+}
+
+fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
+    match &args.to {
+        Some(name) => driver.get_state(&name).ok_or("unknown --to state"),
+        None => match &args.output {
+            Some(out) => driver.guess_state(&out).ok_or("could not infer output state"),
+            None => Err("specify an output file or use --to"),
+        },
+    }
 }
 
 pub fn cli(driver: &Driver) {
     let args: FakeArgs = argh::from_env();
-    dbg!(driver.guess_state(&args.input));
+
+    let from = from_state(driver, &args);
+    let to = to_state(driver, &args);
+    dbg!(from, to);
 }
