@@ -30,4 +30,6 @@ fn main() {
     for step in seq {
         println!("{}: {}", step, driver.ops[step].name);
     }
+
+    driver.main();
 }

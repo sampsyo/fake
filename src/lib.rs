@@ -1,5 +1,7 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
 
+pub mod cli;
+
 /// The details about a given state.
 pub struct StateData {
     pub name: String,
@@ -87,6 +89,10 @@ impl Driver {
         }
         op_path.reverse();
         Some(op_path)
+    }
+
+    pub fn main(&self) {
+        cli::cli(self);
     }
 }
 
