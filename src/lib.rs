@@ -10,12 +10,14 @@ pub struct StateData {
 pub struct State(u32);
 entity_impl!(State, "state");
 
+type OpCall = fn(&dyn Resource) -> &dyn Resource;
+
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
     name: String,
     input: State,
     output: State,
-    call: fn(&dyn Resource) -> dyn Resource,
+    call: OpCall,
 }
 
 /// A reference to an operation.
@@ -48,6 +50,21 @@ impl Driver {
         self.states.push(StateData {
             name: name.to_string(),
             extensions: extensions.iter().map(|s| s.to_string()).collect(),
+        })
+    }
+
+    pub fn add_op(
+        &mut self,
+        name: &str,
+        input: State,
+        output: State,
+        call: OpCall,
+    ) -> Operation {
+        self.ops.push(OpData {
+            name: name.to_string(),
+            input,
+            output,
+            call,
         })
     }
 }
