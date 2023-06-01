@@ -1,4 +1,5 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
+use std::path::Path;
 
 pub mod cli;
 
@@ -11,6 +12,13 @@ pub struct StateData {
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct State(u32);
 entity_impl!(State, "state");
+
+impl StateData {
+    /// Check whether a filename extension indicates this state.
+    fn ext_matches(&self, ext: &str) -> bool {
+        self.extensions.iter().any(|e| e == ext)
+    }
+}
 
 type OpCall = fn(&dyn Resource) -> &dyn Resource;
 
@@ -89,6 +97,16 @@ impl Driver {
         }
         op_path.reverse();
         Some(op_path)
+    }
+    
+    pub fn guess_state(&self, path: &Path) -> Option<State> {
+        let ext = path.extension()?.to_str()?;
+        for (state, state_data) in self.states.iter() {
+            if state_data.ext_matches(ext) {
+                return Some(state);
+            }
+        }
+        None
     }
 
     pub fn main(&self) {
