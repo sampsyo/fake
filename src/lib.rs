@@ -1,4 +1,4 @@
-use cranelift_entity::{entity_impl, PrimaryMap};
+use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
 
 /// The details about a given state.
 pub struct StateData {
@@ -60,5 +60,50 @@ impl Driver {
             output,
             call,
         })
+    }
+
+    pub fn plan(&self, input: State, output: State) -> Option<Vec<Operation>> {
+        // Our start state is the input.
+        let mut visited = SecondaryMap::<State, bool>::new();
+        let mut cur_state = input;
+        visited[input] = true;
+
+        // Build the incoming edges for each vertex.
+        let mut breadcrumbs = SecondaryMap::<State, Option<Operation>>::new();
+
+        // Breadth-first search.
+        let mut state_queue: Vec<State> = vec![input];
+        while !state_queue.is_empty() {
+            let cur_state = state_queue.remove(0);
+
+            // Finish when we reach the goal.
+            if cur_state == output {
+                break;
+            }
+
+            // Traverse any edge from the current state to an unvisited state.
+            for (op, opdata) in self.ops.iter() {
+                if opdata.input == cur_state && !visited[opdata.output] {
+                    state_queue.push(cur_state);
+                    visited[cur_state] = true;
+                    breadcrumbs[cur_state] = Some(op);
+                }
+            }
+        }
+
+        // Traverse the breadcrumbs backward to build up the path back from output to input.
+        let mut op_path: Vec<Operation> = vec![];
+        let mut cur_state = output;
+        while cur_state != input {
+            match breadcrumbs[cur_state] {
+                Some(op) => {
+                    op_path.push(op);
+                    cur_state = self.ops[op].input;
+                }
+                None => return None,
+            }
+        }
+        op_path.reverse();
+        Some(op_path)
     }
 }

@@ -10,16 +10,18 @@ fn main() {
     let calyx = driver.add_state("calyx", &["futil"]);
     let verilog = driver.add_state("verilog", &["sv"]);
 
-    driver.add_op("compile Calyx to Verilog", calyx, verilog, |_| {
-        unimplemented!()
-    });
-    driver.add_op("compile Calyx internally", calyx, calyx, |_| {
-        unimplemented!()
-    });
-    driver.add_op("compile Dahlia", dahlia, calyx, |_| {
-        unimplemented!()
-    });
-    driver.add_op("compile MrXL", mrxl, calyx, |_| {
-        unimplemented!()
-    });
+    driver.add_op(
+        "compile Calyx to Verilog",
+        calyx,
+        verilog,
+        |_| unimplemented!(),
+    );
+    driver.add_op(
+        "compile Calyx internally",
+        calyx,
+        calyx,
+        |_| unimplemented!(),
+    );
+    driver.add_op("compile Dahlia", dahlia, calyx, |_| unimplemented!());
+    driver.add_op("compile MrXL", mrxl, calyx, |_| unimplemented!());
 }
