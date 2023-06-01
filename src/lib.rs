@@ -39,29 +39,12 @@ impl Resource for StringResource {
     }
 }
 
-#[derive(Default)]
 pub struct Driver {
     pub states: PrimaryMap<State, StateData>,
     pub ops: PrimaryMap<Operation, OpData>,
 }
 
 impl Driver {
-    pub fn add_state(&mut self, name: &str, extensions: &[&str]) -> State {
-        self.states.push(StateData {
-            name: name.to_string(),
-            extensions: extensions.iter().map(|s| s.to_string()).collect(),
-        })
-    }
-
-    pub fn add_op(&mut self, name: &str, input: State, output: State, call: OpCall) -> Operation {
-        self.ops.push(OpData {
-            name: name.to_string(),
-            input,
-            output,
-            call,
-        })
-    }
-
     pub fn plan(&self, input: State, output: State) -> Option<Vec<Operation>> {
         // Our start state is the input.
         let mut visited = SecondaryMap::<State, bool>::new();
@@ -104,5 +87,36 @@ impl Driver {
         }
         op_path.reverse();
         Some(op_path)
+    }
+}
+
+#[derive(Default)]
+pub struct DriverBuilder {
+    states: PrimaryMap<State, StateData>,
+    ops: PrimaryMap<Operation, OpData>,
+}
+
+impl DriverBuilder {
+    pub fn state(&mut self, name: &str, extensions: &[&str]) -> State {
+        self.states.push(StateData {
+            name: name.to_string(),
+            extensions: extensions.iter().map(|s| s.to_string()).collect(),
+        })
+    }
+
+    pub fn op(&mut self, name: &str, input: State, output: State, call: OpCall) -> Operation {
+        self.ops.push(OpData {
+            name: name.to_string(),
+            input,
+            output,
+            call,
+        })
+    }
+
+    pub fn build(self) -> Driver {
+        Driver {
+            states: self.states,
+            ops: self.ops,
+        }
     }
 }
