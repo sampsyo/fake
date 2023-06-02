@@ -1,6 +1,6 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
-use std::io::{Read, BufRead};
 
 pub mod cli;
 
@@ -50,6 +50,10 @@ struct FileResource {
     path: PathBuf,
 }
 
+struct StreamResource {
+    stream: Box<dyn BufRead>,
+}
+
 impl Resource for StringResource {
     fn read(self) -> String {
         self.value
@@ -77,6 +81,22 @@ impl Resource for FileResource {
     fn open(self) -> Box<dyn BufRead> {
         let file = std::fs::File::open(self.path).unwrap();
         Box::new(std::io::BufReader::new(file))
+    }
+}
+
+impl Resource for StreamResource {
+    fn read(mut self) -> String {
+        let mut buf = String::new();
+        self.stream.read_to_string(&mut buf).unwrap();
+        buf
+    }
+
+    fn file(self) -> PathBuf {
+        unimplemented!("needs a temporary file")
+    }
+
+    fn open(self) -> Box<dyn BufRead> {
+        self.stream
     }
 }
 
