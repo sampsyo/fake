@@ -1,5 +1,6 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::io::{Read, BufRead};
 
 pub mod cli;
 
@@ -20,7 +21,7 @@ impl StateData {
     }
 }
 
-type OpCall = fn(&dyn Resource) -> &dyn Resource;
+type OpCall = fn(Box<dyn Resource>) -> Box<dyn Resource>;
 
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
@@ -36,16 +37,46 @@ pub struct Operation(u32);
 entity_impl!(Operation, "operation");
 
 pub trait Resource {
-    fn as_str(&self) -> &str;
+    fn read(self) -> String;
+    fn file(self) -> PathBuf;
+    fn open(self) -> Box<dyn BufRead>;
 }
 
 struct StringResource {
     value: String,
 }
 
+struct FileResource {
+    path: PathBuf,
+}
+
 impl Resource for StringResource {
-    fn as_str(&self) -> &str {
-        &self.value
+    fn read(self) -> String {
+        self.value
+    }
+
+    fn file(self) -> PathBuf {
+        unimplemented!("needs a temporary file")
+    }
+
+    fn open(self) -> Box<dyn BufRead> {
+        let cursor = std::io::Cursor::new(self.value);
+        Box::new(cursor)
+    }
+}
+
+impl Resource for FileResource {
+    fn read(self) -> String {
+        std::fs::read_to_string(self.path).unwrap()
+    }
+
+    fn file(self) -> PathBuf {
+        self.path
+    }
+
+    fn open(self) -> Box<dyn BufRead> {
+        let file = std::fs::File::open(self.path).unwrap();
+        Box::new(std::io::BufReader::new(file))
     }
 }
 
