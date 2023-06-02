@@ -8,19 +8,20 @@ fn build_driver() -> Driver {
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv"]);
 
-    bld.op(
-        "compile Calyx to Verilog",
-        calyx,
-        verilog,
-        |_| unimplemented!(),
-    );
+    bld.op("compile Calyx to Verilog", calyx, verilog, |rsrc| {
+        println!("run calyx -b verilog");
+        rsrc
+    });
     bld.op(
         "compile Calyx internally",
         calyx,
         calyx,
         |_| unimplemented!(),
     );
-    bld.op("compile Dahlia", dahlia, calyx, |_| unimplemented!());
+    bld.op("compile Dahlia", dahlia, calyx, |rsrc| {
+        println!("run fuse");
+        rsrc
+    });
     bld.op("compile MrXL", mrxl, calyx, |_| unimplemented!());
 
     bld.build()

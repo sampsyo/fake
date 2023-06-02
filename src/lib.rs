@@ -106,7 +106,7 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn plan(&self, input: State, output: State) -> Option<Vec<Operation>> {
+    pub fn plan(&self, input: State, output: State) -> Option<Plan> {
         // Our start state is the input.
         let mut visited = SecondaryMap::<State, bool>::new();
         visited[input] = true;
@@ -147,7 +147,16 @@ impl Driver {
             }
         }
         op_path.reverse();
-        Some(op_path)
+        Some(Plan { steps: op_path })
+    }
+
+    pub fn run(&self, plan: Plan, input: Box<dyn Resource>) -> Box<dyn Resource> {
+        let mut resource = input;
+        for step in plan.steps {
+            let op = &self.ops[step];
+            resource = (op.call)(resource);
+        }
+        resource
     }
 
     pub fn guess_state(&self, path: &Path) -> Option<State> {
@@ -167,6 +176,10 @@ impl Driver {
 
     pub fn main(&self) {
         cli::cli(self);
+    }
+
+    pub fn file(&self, path: PathBuf) -> Box<dyn Resource> {
+        Box::new(FileResource { path })
     }
 }
 
@@ -205,4 +218,9 @@ impl DriverBuilder {
 pub struct Request {
     pub input: State,
     pub output: State,
+}
+
+#[derive(Debug)]
+pub struct Plan {
+    pub steps: Vec<Operation>,
 }

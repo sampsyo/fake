@@ -1,4 +1,4 @@
-use crate::{Driver, Request, State};
+use crate::{Driver, FileResource, Request, State};
 use argh::FromArgs;
 use std::path::PathBuf;
 
@@ -61,11 +61,14 @@ pub fn cli(driver: &Driver) {
     });
     dbg!(&req);
 
-    let seq = driver.plan(req.input, req.output).unwrap_or_else(|| {
+    let plan = driver.plan(req.input, req.output).unwrap_or_else(|| {
         eprintln!("error: could not find path");
         std::process::exit(1);
     });
-    for step in seq {
-        println!("{}: {}", step, driver.ops[step].name);
+    for step in &plan.steps {
+        println!("{}: {}", step, driver.ops[*step].name);
     }
+
+    let input = driver.file(args.input);
+    driver.run(plan, input);
 }
