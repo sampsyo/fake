@@ -1,4 +1,4 @@
-use crate::{Driver, FileResource, Request, State};
+use crate::{Driver, Request, State};
 use argh::FromArgs;
 use std::path::PathBuf;
 
