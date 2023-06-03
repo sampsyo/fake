@@ -21,7 +21,7 @@ impl StateData {
     }
 }
 
-type OpCall = fn(Resource) -> Resource;
+type OpCall = fn(&Build, Resource) -> Resource;
 
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
@@ -42,9 +42,11 @@ pub enum Resource {
     Stream(Box<dyn BufRead>),
 }
 
-pub struct Build;
+pub struct Build<'a> {
+    driver: &'a Driver,
+}
 
-impl Build {
+impl<'a> Build<'a> {
     pub fn read(&self, rsrc: Resource) -> String {
         match rsrc {
             Resource::String(s) => s,
@@ -74,6 +76,15 @@ impl Build {
             }
             Resource::Stream(s) => s,
         }
+    }
+
+    pub fn run(&self, plan: Plan, input: Resource) -> Resource {
+        let mut resource = input;
+        for step in plan.steps {
+            let op = &self.driver.ops[step];
+            resource = (op.call)(self, resource);
+        }
+        resource
     }
 }
 
@@ -127,15 +138,6 @@ impl Driver {
         Some(Plan { steps: op_path })
     }
 
-    pub fn run(&self, plan: Plan, input: Resource) -> Resource {
-        let mut resource = input;
-        for step in plan.steps {
-            let op = &self.ops[step];
-            resource = (op.call)(resource);
-        }
-        resource
-    }
-
     pub fn guess_state(&self, path: &Path) -> Option<State> {
         let ext = path.extension()?.to_str()?;
         self.states
@@ -153,6 +155,10 @@ impl Driver {
 
     pub fn main(&self) {
         cli::cli(self);
+    }
+
+    pub fn build(&self) -> Build {
+        Build { driver: self }
     }
 }
 

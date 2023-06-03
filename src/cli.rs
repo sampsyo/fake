@@ -70,5 +70,6 @@ pub fn cli(driver: &Driver) {
     }
 
     let input = Resource::File(args.input);
-    driver.run(plan, input);
+    let build = driver.build();
+    build.run(plan, input);
 }
