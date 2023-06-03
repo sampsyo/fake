@@ -1,4 +1,4 @@
-use crate::{Driver, Request, State};
+use crate::{Driver, Request, Resource, State};
 use argh::FromArgs;
 use std::path::PathBuf;
 
@@ -69,6 +69,6 @@ pub fn cli(driver: &Driver) {
         println!("{}: {}", step, driver.ops[*step].name);
     }
 
-    let input = driver.file(args.input);
+    let input = Resource::File(args.input);
     driver.run(plan, input);
 }

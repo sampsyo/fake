@@ -21,7 +21,7 @@ impl StateData {
     }
 }
 
-type OpCall = fn(Box<dyn Resource>) -> Box<dyn Resource>;
+type OpCall = fn(Resource) -> Resource;
 
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
@@ -36,67 +36,44 @@ pub struct OpData {
 pub struct Operation(u32);
 entity_impl!(Operation, "operation");
 
-pub trait Resource {
-    fn read(self) -> String;
-    fn file(self) -> PathBuf;
-    fn open(self) -> Box<dyn BufRead>;
+pub enum Resource {
+    String(String),
+    File(PathBuf),
+    Stream(Box<dyn BufRead>),
 }
 
-struct StringResource {
-    value: String,
-}
+pub struct Build;
 
-struct FileResource {
-    path: PathBuf,
-}
-
-struct StreamResource {
-    stream: Box<dyn BufRead>,
-}
-
-impl Resource for StringResource {
-    fn read(self) -> String {
-        self.value
+impl Build {
+    pub fn read(&self, rsrc: Resource) -> String {
+        match rsrc {
+            Resource::String(s) => s,
+            Resource::File(p) => std::fs::read_to_string(p).unwrap(),
+            Resource::Stream(mut s) => {
+                let mut buf = String::new();
+                s.read_to_string(&mut buf).unwrap();
+                buf
+            }
+        }
     }
 
-    fn file(self) -> PathBuf {
-        unimplemented!("needs a temporary file")
+    pub fn file(&self, rsrc: Resource) -> PathBuf {
+        match rsrc {
+            Resource::String(_) => unimplemented!("needs a temporary file"),
+            Resource::File(p) => p,
+            Resource::Stream(_) => unimplemented!("needs a temporary file"),
+        }
     }
 
-    fn open(self) -> Box<dyn BufRead> {
-        let cursor = std::io::Cursor::new(self.value);
-        Box::new(cursor)
-    }
-}
-
-impl Resource for FileResource {
-    fn read(self) -> String {
-        std::fs::read_to_string(self.path).unwrap()
-    }
-
-    fn file(self) -> PathBuf {
-        self.path
-    }
-
-    fn open(self) -> Box<dyn BufRead> {
-        let file = std::fs::File::open(self.path).unwrap();
-        Box::new(std::io::BufReader::new(file))
-    }
-}
-
-impl Resource for StreamResource {
-    fn read(mut self) -> String {
-        let mut buf = String::new();
-        self.stream.read_to_string(&mut buf).unwrap();
-        buf
-    }
-
-    fn file(self) -> PathBuf {
-        unimplemented!("needs a temporary file")
-    }
-
-    fn open(self) -> Box<dyn BufRead> {
-        self.stream
+    pub fn open(&self, rsrc: Resource) -> Box<dyn BufRead> {
+        match rsrc {
+            Resource::String(s) => Box::new(std::io::Cursor::new(s)),
+            Resource::File(p) => {
+                let file = std::fs::File::open(p).unwrap();
+                Box::new(std::io::BufReader::new(file))
+            }
+            Resource::Stream(s) => s,
+        }
     }
 }
 
@@ -150,7 +127,7 @@ impl Driver {
         Some(Plan { steps: op_path })
     }
 
-    pub fn run(&self, plan: Plan, input: Box<dyn Resource>) -> Box<dyn Resource> {
+    pub fn run(&self, plan: Plan, input: Resource) -> Resource {
         let mut resource = input;
         for step in plan.steps {
             let op = &self.ops[step];
@@ -176,10 +153,6 @@ impl Driver {
 
     pub fn main(&self) {
         cli::cli(self);
-    }
-
-    pub fn file(&self, path: PathBuf) -> Box<dyn Resource> {
-        Box::new(FileResource { path })
     }
 }
 
