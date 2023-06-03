@@ -1,4 +1,10 @@
-use fake::{Driver, DriverBuilder, Resource};
+use fake::{Build, Driver, DriverBuilder, Resource};
+
+fn calyx_build(build: &Build, rsrc: Resource) -> Resource {
+    let path = build.file(rsrc);
+    println!("run calyx -b verilog {}", path.to_string_lossy());
+    Resource::File(path)
+}
 
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
@@ -8,11 +14,7 @@ fn build_driver() -> Driver {
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv"]);
 
-    bld.op("compile Calyx to Verilog", calyx, verilog, |build, rsrc| {
-        let path = build.file(rsrc);
-        println!("run calyx -b verilog {}", path.to_string_lossy());
-        Resource::File(path)
-    });
+    bld.op("compile Calyx to Verilog", calyx, verilog, calyx_build);
     bld.op(
         "compile Calyx internally",
         calyx,
