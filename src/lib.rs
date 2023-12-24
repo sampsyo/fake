@@ -174,9 +174,10 @@ impl Emitter {
         }
     }
 
-    fn gen_filename(&mut self, ext: &str) -> PathBuf {
-        // TODO actually generate random filename, possibly here or possibly in /tmp
-        let name = self.workdir.join("TEMP_STUFF").with_extension(ext);
+    fn gen_name(&mut self, in_name: &Path, ext: &str) -> PathBuf {
+        let stem = in_name.file_stem().expect("input filename missing");
+        let name = self.workdir.join(stem).with_extension(ext);
+        // TODO avoid collisions if we reuse extensions...
         self.temp_files.push(name.clone());
         name
     }
@@ -200,7 +201,7 @@ impl Emitter {
             let op = &driver.ops[step];
 
             // TODO or use destination if this is the last step
-            let outfile = self.gen_filename(&driver.states[op.output].extensions[0]);
+            let outfile = self.gen_name(&filename, &driver.states[op.output].extensions[0]);
 
             (op.build)(self, &filename, &outfile);
             filename = outfile;
