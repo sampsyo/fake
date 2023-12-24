@@ -84,9 +84,19 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
 }
 
 fn get_request(driver: &Driver, args: &FakeArgs) -> Result<Request> {
+    let workdir = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
+
+    let in_path = relative_path(&args.input, &workdir);
+    let out_path = match &args.output {
+        Some(out_path) => Some(relative_path(out_path, &workdir)),
+        None => None,
+    };
+
     Ok(Request {
-        input: from_state(driver, args)?,
-        output: to_state(driver, args)?,
+        start_file: in_path,
+        start_state: from_state(driver, args)?,
+        end_file: out_path,
+        end_state: to_state(driver, args)?,
     })
 }
 
@@ -131,28 +141,21 @@ pub fn cli(driver: &Driver) {
         std::process::exit(1);
     });
 
-    let plan = driver.plan(req.input, req.output).unwrap_or_else(|| {
+    let plan = driver.plan(req).unwrap_or_else(|| {
         eprintln!("error: could not find path");
         std::process::exit(1);
     });
 
     match args.mode {
         Mode::ShowPlan => {
-            for step in &plan.steps {
-                println!("{}: {}", step, driver.ops[*step].name);
+            println!("start: {}", plan.start.display());
+            for (op, file) in &plan.steps {
+                println!("{}: {} -> {}", op, driver.ops[*op].name, file.display());
             }
         }
         Mode::EmitNinja => {
-            let workdir = args.dir.unwrap_or_else(|| PathBuf::from("."));
-
-            let in_path = relative_path(&args.input, &workdir);
-            let out_path = match &args.output {
-                Some(out_path) => Some(relative_path(out_path, &workdir)),
-                None => None,
-            };
-
             let mut emitter = Emitter::new();
-            emitter.emit(&driver, plan, &in_path, out_path.as_deref());
+            emitter.emit(&driver, plan);
         }
     }
 }

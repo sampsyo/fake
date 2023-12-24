@@ -1,5 +1,6 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -45,21 +46,21 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn plan(&self, input: State, output: State) -> Option<Plan> {
+    pub fn find_path(&self, start: State, end: State) -> Option<Vec<Operation>> {
         // Our start state is the input.
         let mut visited = SecondaryMap::<State, bool>::new();
-        visited[input] = true;
+        visited[start] = true;
 
         // Build the incoming edges for each vertex.
         let mut breadcrumbs = SecondaryMap::<State, Option<Operation>>::new();
 
         // Breadth-first search.
-        let mut state_queue: Vec<State> = vec![input];
+        let mut state_queue: Vec<State> = vec![start];
         while !state_queue.is_empty() {
             let cur_state = state_queue.remove(0);
 
             // Finish when we reach the goal.
-            if cur_state == output {
+            if cur_state == end {
                 break;
             }
 
@@ -75,8 +76,8 @@ impl Driver {
 
         // Traverse the breadcrumbs backward to build up the path back from output to input.
         let mut op_path: Vec<Operation> = vec![];
-        let mut cur_state = output;
-        while cur_state != input {
+        let mut cur_state = end;
+        while cur_state != start {
             match breadcrumbs[cur_state] {
                 Some(op) => {
                     op_path.push(op);
@@ -86,7 +87,45 @@ impl Driver {
             }
         }
         op_path.reverse();
-        Some(Plan { steps: op_path })
+
+        Some(op_path)
+    }
+
+    fn gen_name(&self, stem: &OsStr, op: Operation) -> PathBuf {
+        // Pick an appropriate extension for the output of this operation.
+        let op = &self.ops[op];
+        let ext = &self.states[op.output].extensions[0];
+
+        let name = PathBuf::from(stem).with_extension(ext);
+        // TODO avoid collisions if we reuse extensions...
+        name
+    }
+
+    pub fn plan(&self, req: Request) -> Option<Plan> {
+        // Find a path through the states.
+        let path = self.find_path(req.start_state, req.end_state)?;
+
+        // Generate filenames for each step.
+        let stem = req.start_file.file_stem().expect("input filename missing");
+        let mut steps: Vec<_> = path
+            .into_iter()
+            .map(|op| {
+                let filename = self.gen_name(&stem, op);
+                (op, filename)
+            })
+            .collect();
+
+        // If we have a specified output filename, use that instead of the generated one.
+        // TODO this is ugly
+        if let Some(end_file) = req.end_file {
+            let last_step = steps.last_mut().expect("no steps");
+            last_step.1 = end_file;
+        }
+
+        Some(Plan {
+            start: req.start_file,
+            steps: steps,
+        })
     }
 
     pub fn guess_state(&self, path: &Path) -> Option<State> {
@@ -150,13 +189,16 @@ impl DriverBuilder {
 
 #[derive(Debug)]
 pub struct Request {
-    pub input: State,
-    pub output: State,
+    pub start_state: State,
+    pub start_file: PathBuf,
+    pub end_state: State,
+    pub end_file: Option<PathBuf>,
 }
 
 #[derive(Debug)]
 pub struct Plan {
-    pub steps: Vec<Operation>,
+    pub start: PathBuf,
+    pub steps: Vec<(Operation, PathBuf)>,
 }
 
 pub struct Emitter {
@@ -170,20 +212,13 @@ impl Emitter {
         }
     }
 
-    fn gen_name(&mut self, in_name: &Path, ext: &str) -> PathBuf {
-        let stem = in_name.file_stem().expect("input filename missing");
-        let name = PathBuf::from(stem).with_extension(ext);
-        // TODO avoid collisions if we reuse extensions...
-        name
-    }
-
-    pub fn emit(&mut self, driver: &Driver, plan: Plan, input: &Path, output: Option<&Path>) {
+    pub fn emit(&mut self, driver: &Driver, plan: Plan) {
         // Emit the rules for each operation used in the plan, only once.
         let mut seen_ops = HashSet::<Operation>::new();
-        for step in &plan.steps {
-            if seen_ops.insert(*step) {
-                writeln!(self.out, "# {}", driver.ops[*step].name).unwrap();
-                let op = &driver.ops[*step];
+        for (op, _) in &plan.steps {
+            if seen_ops.insert(*op) {
+                writeln!(self.out, "# {}", driver.ops[*op].name).unwrap();
+                let op = &driver.ops[*op];
                 (op.rules)(self);
                 writeln!(self.out, "").unwrap();
             }
@@ -191,25 +226,15 @@ impl Emitter {
 
         // Emit the build commands for each step in the plan.
         writeln!(self.out, "# build targets").unwrap();
-        let mut filename = input.to_owned();
-        let mut it = plan.steps.iter().peekable();
-        while let Some(&step) = it.next() {
-            let op = &driver.ops[step];
-
-            // Generate a filename, or use the destination filename for the last step.
-            // TODO this whole handling of outfile/filename/etc. is terrible
-            let outfile = if it.peek().is_none() && output.is_some() {
-                output.unwrap().to_owned()
-            } else {
-                self.gen_name(&filename, &driver.states[op.output].extensions[0])
-            };
-
-            (op.build)(self, &filename, &outfile);
-            filename = outfile;
+        let mut last_file = plan.start;
+        for (op, out_file) in plan.steps {
+            let op = &driver.ops[op];
+            (op.build)(self, &last_file, &out_file);
+            last_file = out_file;
         }
 
         // Mark the last file as the default target.
         writeln!(self.out, "").unwrap();
-        writeln!(self.out, "default {}", filename.display()).unwrap();
+        writeln!(self.out, "default {}", last_file.display()).unwrap(); // TODO pass through bytes, not `display`
     }
 }
