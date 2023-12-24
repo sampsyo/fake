@@ -134,7 +134,7 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
     }
 }
 
-pub fn cli(driver: &Driver) {
+fn cli_inner(driver: &Driver) -> Result<()> {
     let args: FakeArgs = argh::from_env();
 
     // The default working directory (if not specified) depends on the mode.
@@ -145,15 +145,8 @@ pub fn cli(driver: &Driver) {
         })
     });
 
-    let req = get_request(driver, &args, &workdir).unwrap_or_else(|e| {
-        eprintln!("error: {}", e);
-        std::process::exit(1);
-    });
-
-    let plan = driver.plan(req).unwrap_or_else(|| {
-        eprintln!("error: could not find path");
-        std::process::exit(1);
-    });
+    let req = get_request(driver, &args, &workdir)?;
+    let plan = driver.plan(req).ok_or("could not find path")?;
 
     match args.mode {
         Mode::ShowPlan => {
@@ -167,18 +160,25 @@ pub fn cli(driver: &Driver) {
             emitter.emit(&driver, plan);
         }
         Mode::Generate => {
-            std::fs::create_dir_all(&workdir).unwrap_or_else(|e| {
-                eprintln!("error: could not create working directory: {}", e);
-                std::process::exit(1);
-                // TODO use proper error types to simplify...
-            });
+            std::fs::create_dir_all(&workdir).map_err(|_| "could not create working directory")?;
+
             let ninja_path = workdir.join("build.ninja");
-            let ninja_file = std::fs::File::create(&ninja_path).unwrap_or_else(|e| {
-                eprintln!("error: could not create ninja file: {}", e);
-                std::process::exit(1); // TODO
-            });
+            let ninja_file =
+                std::fs::File::create(&ninja_path).map_err(|_| "could not create ninja file")?;
             let mut emitter = Emitter::new(Box::new(ninja_file));
             emitter.emit(&driver, plan);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn cli(driver: &Driver) {
+    match cli_inner(driver) {
+        Ok(()) => {}
+        Err(e) => {
+            eprintln!("error: {}", e);
+            std::process::exit(1);
         }
     }
 }
