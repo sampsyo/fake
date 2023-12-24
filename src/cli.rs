@@ -65,9 +65,9 @@ pub fn cli(driver: &Driver) {
         eprintln!("error: could not find path");
         std::process::exit(1);
     });
-    for step in &plan.steps {
-        println!("{}: {}", step, driver.ops[*step].name);
-    }
+    // for step in &plan.steps {
+    //     println!("{}: {}", step, driver.ops[*step].name);
+    // }
 
     let mut emitter = Emitter::default();
     emitter.emit(&driver, plan, args.input);

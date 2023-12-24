@@ -2,15 +2,19 @@ use fake::{Driver, DriverBuilder, Emitter};
 use std::path::Path;
 
 fn calyx_rules(emitter: &mut Emitter) {
-    writeln!(emitter.out, "rule about calyx -b verilog $in > $out").unwrap();
+    // TODO. something about configurable variables
+    // TODO utilities for Ninja generation, or use a library?
+    writeln!(emitter.out, "calyx = /Users/asampson/cu/research/calyx/target/debug/calyx").unwrap();
+    writeln!(emitter.out, "rule calyx").unwrap();
+    writeln!(emitter.out, "  command = $calyx -b verilog $in -o $out").unwrap();
 }
 
 fn calyx_build(emitter: &mut Emitter, input: &Path, output: &Path) {
     writeln!(
         emitter.out,
-        "run calyx -b verilog {} > {}",
-        input.to_string_lossy(),
+        "build {}: calyx {}",
         output.to_string_lossy(),
+        input.to_string_lossy(),
     )
     .unwrap();
 }

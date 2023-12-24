@@ -186,12 +186,15 @@ impl Emitter {
         let mut seen_ops = HashSet::<Operation>::new();
         for step in &plan.steps {
             if seen_ops.insert(*step) {
+                writeln!(self.out, "# {}", driver.ops[*step].name).unwrap();
                 let op = &driver.ops[*step];
                 (op.rules)(self);
+                writeln!(self.out, "").unwrap();
             }
         }
 
         // Emit the build commands for each step in the plan.
+        writeln!(self.out, "# build targets").unwrap();
         let mut filename = input;
         for step in plan.steps {
             let op = &driver.ops[step];
