@@ -1,16 +1,17 @@
-use crate::{Driver, Emitter, Request, State};
+use crate::{Driver, Emitter, Plan, Request, State};
 use argh::FromArgs;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 use std::str::FromStr;
 
 enum Mode {
     EmitNinja,
     ShowPlan,
     Generate,
+    Run,
 }
-// TODO: Future modes: generate, run
 
 impl FromStr for Mode {
     type Err = String;
@@ -20,6 +21,7 @@ impl FromStr for Mode {
             "emit" => Ok(Mode::EmitNinja),
             "plan" => Ok(Mode::ShowPlan),
             "gen" => Ok(Mode::Generate),
+            "run" => Ok(Mode::Run),
             _ => Err("unknown mode".to_string()),
         }
     }
@@ -31,6 +33,7 @@ impl Display for Mode {
             Mode::EmitNinja => write!(f, "emit"),
             Mode::ShowPlan => write!(f, "plan"),
             Mode::Generate => write!(f, "gen"),
+            Mode::Run => write!(f, "run"),
         }
     }
 }
@@ -134,13 +137,23 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
     }
 }
 
+fn generate(driver: &Driver, workdir: &Path, plan: Plan) -> Result<()> {
+    std::fs::create_dir_all(workdir).map_err(|_| "could not create working directory")?;
+    let ninja_path = workdir.join("build.ninja");
+    let ninja_file =
+        std::fs::File::create(&ninja_path).map_err(|_| "could not create ninja file")?;
+    let mut emitter = Emitter::new(Box::new(ninja_file));
+    emitter.emit(driver, plan);
+    Ok(())
+}
+
 fn cli_inner(driver: &Driver) -> Result<()> {
     let args: FakeArgs = argh::from_env();
 
     // The default working directory (if not specified) depends on the mode.
     let workdir = args.dir.clone().unwrap_or_else(|| {
         PathBuf::from(match args.mode {
-            Mode::Generate => ".fake",
+            Mode::Generate | Mode::Run => ".fake",
             _ => ".",
         })
     });
@@ -160,13 +173,17 @@ fn cli_inner(driver: &Driver) -> Result<()> {
             emitter.emit(&driver, plan);
         }
         Mode::Generate => {
-            std::fs::create_dir_all(&workdir).map_err(|_| "could not create working directory")?;
+            generate(&driver, &workdir, plan)?;
+        }
+        Mode::Run => {
+            // The `run` mode is equivalent to `fake --mode gen && ninja -C .fake`.
+            generate(&driver, &workdir, plan)?;
 
-            let ninja_path = workdir.join("build.ninja");
-            let ninja_file =
-                std::fs::File::create(&ninja_path).map_err(|_| "could not create ninja file")?;
-            let mut emitter = Emitter::new(Box::new(ninja_file));
-            emitter.emit(&driver, plan);
+            // TODO configurable `ninja` command and args
+            Command::new("ninja")
+                .current_dir(&workdir)
+                .spawn()
+                .map_err(|_| "ninja execution failed")?;
         }
     }
 
