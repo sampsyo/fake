@@ -206,10 +206,8 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub fn new() -> Self {
-        Self {
-            out: Box::new(std::io::stdout()),
-        }
+    pub fn new(out: Box<dyn Write>) -> Self {
+        Self { out }
     }
 
     pub fn emit(&mut self, driver: &Driver, plan: Plan) {

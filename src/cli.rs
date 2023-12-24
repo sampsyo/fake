@@ -8,6 +8,7 @@ use std::str::FromStr;
 enum Mode {
     EmitNinja,
     ShowPlan,
+    Generate,
 }
 // TODO: Future modes: generate, run
 
@@ -18,6 +19,7 @@ impl FromStr for Mode {
         match s {
             "emit" => Ok(Mode::EmitNinja),
             "plan" => Ok(Mode::ShowPlan),
+            "gen" => Ok(Mode::Generate),
             _ => Err("unknown mode".to_string()),
         }
     }
@@ -28,6 +30,7 @@ impl Display for Mode {
         match self {
             Mode::EmitNinja => write!(f, "emit"),
             Mode::ShowPlan => write!(f, "plan"),
+            Mode::Generate => write!(f, "gen"),
         }
     }
 }
@@ -83,12 +86,10 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
     }
 }
 
-fn get_request(driver: &Driver, args: &FakeArgs) -> Result<Request> {
-    let workdir = args.dir.clone().unwrap_or_else(|| PathBuf::from("."));
-
-    let in_path = relative_path(&args.input, &workdir);
+fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> Result<Request> {
+    let in_path = relative_path(&args.input, workdir);
     let out_path = match &args.output {
-        Some(out_path) => Some(relative_path(out_path, &workdir)),
+        Some(out_path) => Some(relative_path(out_path, workdir)),
         None => None,
     };
 
@@ -136,7 +137,15 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
 pub fn cli(driver: &Driver) {
     let args: FakeArgs = argh::from_env();
 
-    let req = get_request(driver, &args).unwrap_or_else(|e| {
+    // The default working directory (if not specified) depends on the mode.
+    let workdir = args.dir.clone().unwrap_or_else(|| {
+        PathBuf::from(match args.mode {
+            Mode::Generate => ".fake",
+            _ => ".",
+        })
+    });
+
+    let req = get_request(driver, &args, &workdir).unwrap_or_else(|e| {
         eprintln!("error: {}", e);
         std::process::exit(1);
     });
@@ -154,7 +163,21 @@ pub fn cli(driver: &Driver) {
             }
         }
         Mode::EmitNinja => {
-            let mut emitter = Emitter::new();
+            let mut emitter = Emitter::new(Box::new(std::io::stdout()));
+            emitter.emit(&driver, plan);
+        }
+        Mode::Generate => {
+            std::fs::create_dir_all(&workdir).unwrap_or_else(|e| {
+                eprintln!("error: could not create working directory: {}", e);
+                std::process::exit(1);
+                // TODO use proper error types to simplify...
+            });
+            let ninja_path = workdir.join("build.ninja");
+            let ninja_file = std::fs::File::create(&ninja_path).unwrap_or_else(|e| {
+                eprintln!("error: could not create ninja file: {}", e);
+                std::process::exit(1); // TODO
+            });
+            let mut emitter = Emitter::new(Box::new(ninja_file));
             emitter.emit(&driver, plan);
         }
     }
