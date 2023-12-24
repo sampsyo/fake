@@ -1,6 +1,34 @@
 use crate::{Driver, Emitter, Request, State};
 use argh::FromArgs;
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
+
+enum Mode {
+    Emit,
+    Plan,
+}
+
+impl FromStr for Mode {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "emit" => Ok(Mode::Emit),
+            "plan" => Ok(Mode::Plan),
+            _ => Err("unknown mode".to_string()),
+        }
+    }
+}
+
+impl Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mode::Emit => write!(f, "emit"),
+            Mode::Plan => write!(f, "plan"),
+        }
+    }
+}
 
 #[derive(FromArgs)]
 /// A generic compiler driver.
@@ -20,6 +48,10 @@ struct FakeArgs {
     /// the state to produce
     #[argh(option)]
     to: Option<String>,
+
+    /// execution mode (plan, emit)
+    #[argh(option, default = "Mode::Emit")]
+    mode: Mode,
 }
 
 type Result<T> = std::result::Result<T, &'static str>;
@@ -59,16 +91,22 @@ pub fn cli(driver: &Driver) {
         eprintln!("error: {}", e);
         std::process::exit(1);
     });
-    dbg!(&req);
 
     let plan = driver.plan(req.input, req.output).unwrap_or_else(|| {
         eprintln!("error: could not find path");
         std::process::exit(1);
     });
-    // for step in &plan.steps {
-    //     println!("{}: {}", step, driver.ops[*step].name);
-    // }
 
-    let mut emitter = Emitter::default();
-    emitter.emit(&driver, plan, args.input);
+    match args.mode {
+        Mode::Plan => {
+            for step in &plan.steps {
+                println!("{}: {}", step, driver.ops[*step].name);
+            }
+        }
+        Mode::Emit => {
+            let mut emitter = Emitter::default();
+            emitter.emit(&driver, plan, args.input);
+        }
+        // TODO a future "run" mode
+    }
 }

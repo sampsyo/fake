@@ -4,7 +4,11 @@ use std::path::Path;
 fn calyx_rules(emitter: &mut Emitter) {
     // TODO. something about configurable variables
     // TODO utilities for Ninja generation, or use a library?
-    writeln!(emitter.out, "calyx = /Users/asampson/cu/research/calyx/target/debug/calyx").unwrap();
+    writeln!(
+        emitter.out,
+        "calyx = /Users/asampson/cu/research/calyx/target/debug/calyx"
+    )
+    .unwrap();
     writeln!(emitter.out, "rule calyx").unwrap();
     writeln!(emitter.out, "  command = $calyx -b verilog $in -o $out").unwrap();
 }
