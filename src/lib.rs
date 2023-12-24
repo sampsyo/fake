@@ -1,5 +1,5 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
-use std::io::{BufRead, Read};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub mod cli;
@@ -21,72 +21,22 @@ impl StateData {
     }
 }
 
-type OpCall = fn(&Build, Resource) -> Resource;
+type EmitRules = fn(&mut Emitter) -> ();
+type EmitBuild = fn(&mut Emitter, PathBuf) -> PathBuf;
 
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
     pub name: String,
     pub input: State,
     pub output: State,
-    pub call: OpCall,
+    pub rules: EmitRules,
+    pub build: EmitBuild,
 }
 
 /// A reference to an operation.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Operation(u32);
 entity_impl!(Operation, "operation");
-
-pub enum Resource {
-    String(String),
-    File(PathBuf),
-    Stream(Box<dyn BufRead>),
-}
-
-pub struct Build<'a> {
-    driver: &'a Driver,
-}
-
-impl<'a> Build<'a> {
-    pub fn read(&self, rsrc: Resource) -> String {
-        match rsrc {
-            Resource::String(s) => s,
-            Resource::File(p) => std::fs::read_to_string(p).unwrap(),
-            Resource::Stream(mut s) => {
-                let mut buf = String::new();
-                s.read_to_string(&mut buf).unwrap();
-                buf
-            }
-        }
-    }
-
-    pub fn file(&self, rsrc: Resource) -> PathBuf {
-        match rsrc {
-            Resource::String(_) => unimplemented!("needs a temporary file"),
-            Resource::File(p) => p,
-            Resource::Stream(_) => unimplemented!("needs a temporary file"),
-        }
-    }
-
-    pub fn open(&self, rsrc: Resource) -> Box<dyn BufRead> {
-        match rsrc {
-            Resource::String(s) => Box::new(std::io::Cursor::new(s)),
-            Resource::File(p) => {
-                let file = std::fs::File::open(p).unwrap();
-                Box::new(std::io::BufReader::new(file))
-            }
-            Resource::Stream(s) => s,
-        }
-    }
-
-    pub fn run(&self, plan: Plan, input: Resource) -> Resource {
-        let mut resource = input;
-        for step in plan.steps {
-            let op = &self.driver.ops[step];
-            resource = (op.call)(self, resource);
-        }
-        resource
-    }
-}
 
 pub struct Driver {
     pub states: PrimaryMap<State, StateData>,
@@ -157,8 +107,16 @@ impl Driver {
         cli::cli(self);
     }
 
-    pub fn build(&self) -> Build {
-        Build { driver: self }
+    pub fn emit(&self, plan: Plan, input: PathBuf) {
+        let mut emitter = Emitter::default();
+
+        // TODO call `rules`!
+
+        let mut filename = input;
+        for step in plan.steps {
+            let op = &self.ops[step];
+            filename = (op.build)(&mut emitter, filename);
+        }
     }
 }
 
@@ -176,12 +134,20 @@ impl DriverBuilder {
         })
     }
 
-    pub fn op(&mut self, name: &str, input: State, output: State, call: OpCall) -> Operation {
+    pub fn op(
+        &mut self,
+        name: &str,
+        input: State,
+        output: State,
+        rules: EmitRules,
+        build: EmitBuild,
+    ) -> Operation {
         self.ops.push(OpData {
             name: name.to_string(),
             input,
             output,
-            call,
+            rules,
+            build,
         })
     }
 
@@ -202,4 +168,16 @@ pub struct Request {
 #[derive(Debug)]
 pub struct Plan {
     pub steps: Vec<Operation>,
+}
+
+pub struct Emitter {
+    pub out: Box<dyn Write>,
+}
+
+impl Emitter {
+    pub fn default() -> Self {
+        Self {
+            out: Box::new(std::io::stdout()),
+        }
+    }
 }
