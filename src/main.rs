@@ -6,11 +6,16 @@ fn calyx_rules(emitter: &mut Emitter) {
     // TODO utilities for Ninja generation, or use a library?
     writeln!(
         emitter.out,
-        "calyx = /Users/asampson/cu/research/calyx/target/debug/calyx"
+        "calyx_base = /Users/asampson/cu/research/calyx"
     )
     .unwrap();
+    writeln!(emitter.out, "calyx_exe = $calyx_base/target/debug/calyx").unwrap();
     writeln!(emitter.out, "rule calyx").unwrap();
-    writeln!(emitter.out, "  command = $calyx -b verilog $in -o $out").unwrap();
+    writeln!(
+        emitter.out,
+        "  command = $calyx_exe -l $calyx_base -b verilog $in -o $out"
+    )
+    .unwrap();
 }
 
 fn calyx_build(emitter: &mut Emitter, input: &Path, output: &Path) {
