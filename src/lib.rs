@@ -209,5 +209,9 @@ impl Emitter {
             (op.build)(self, &filename, &outfile);
             filename = outfile;
         }
+
+        // Mark the last file as the default target.
+        writeln!(self.out, "").unwrap();
+        writeln!(self.out, "default {}", filename.display()).unwrap();
     }
 }
