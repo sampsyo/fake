@@ -161,20 +161,18 @@ pub struct Plan {
 
 pub struct Emitter {
     pub out: Box<dyn Write>,
-    pub workdir: PathBuf,
 }
 
 impl Emitter {
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         Self {
             out: Box::new(std::io::stdout()),
-            workdir: PathBuf::from("."),
         }
     }
 
     fn gen_name(&mut self, in_name: &Path, ext: &str) -> PathBuf {
         let stem = in_name.file_stem().expect("input filename missing");
-        let name = self.workdir.join(stem).with_extension(ext);
+        let name = PathBuf::from(stem).with_extension(ext);
         // TODO avoid collisions if we reuse extensions...
         name
     }

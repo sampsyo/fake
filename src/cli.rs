@@ -1,6 +1,7 @@
 use crate::{Driver, Emitter, Request, State};
 use argh::FromArgs;
 use std::fmt::Display;
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -8,6 +9,7 @@ enum Mode {
     Emit,
     Plan,
 }
+// TODO: Future modes: generate, run
 
 impl FromStr for Mode {
     type Err = String;
@@ -52,6 +54,10 @@ struct FakeArgs {
     /// execution mode (plan, emit)
     #[argh(option, default = "Mode::Emit")]
     mode: Mode,
+
+    /// working directory for the build
+    #[argh(option)]
+    dir: Option<PathBuf>,
 }
 
 type Result<T> = std::result::Result<T, &'static str>;
@@ -84,6 +90,39 @@ fn get_request(driver: &Driver, args: &FakeArgs) -> Result<Request> {
     })
 }
 
+/// Generate a path referring to the same file as `path` that is usable when the working directory
+/// is `base`. This can always just be `path.canonical()` as a fallback, but sometimes we can
+/// opportunistically make it a little friendlier.
+fn relative_path(path: &Path, base: &Path) -> PathBuf {
+    if base == Path::new(".") {
+        path.to_path_buf()
+    } else if path.is_absolute() {
+        path.to_path_buf()
+    } else if path.starts_with(base) {
+        path.strip_prefix(base).unwrap().to_path_buf()
+    } else if base.is_relative() {
+        if base
+            .components()
+            .find(|c| c == &std::path::Component::ParentDir)
+            .is_some()
+        {
+            // Too hard to handle base paths with `..`.
+            path.canonicalize().unwrap()
+        } else {
+            // A special case when, e.g., base is just a subdirectory of cwd. We
+            // can get "back" to the current directroy above base via `..`.
+            let mut out = PathBuf::new();
+            for _ in base.components() {
+                out.push("..");
+            }
+            out.push(path);
+            out
+        }
+    } else {
+        path.canonicalize().unwrap()
+    }
+}
+
 pub fn cli(driver: &Driver) {
     let args: FakeArgs = argh::from_env();
 
@@ -104,8 +143,16 @@ pub fn cli(driver: &Driver) {
             }
         }
         Mode::Emit => {
-            let mut emitter = Emitter::default();
-            emitter.emit(&driver, plan, &args.input, args.output.as_deref());
-        } // TODO a future "run" mode
+            let workdir = args.dir.unwrap_or_else(|| PathBuf::from("."));
+
+            let in_path = relative_path(&args.input, &workdir);
+            let out_path = match &args.output {
+                Some(out_path) => Some(relative_path(out_path, &workdir)),
+                None => None,
+            };
+
+            let mut emitter = Emitter::new();
+            emitter.emit(&driver, plan, &in_path, out_path.as_deref());
+        }
     }
 }
