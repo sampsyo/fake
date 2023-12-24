@@ -57,7 +57,8 @@ struct FakeArgs {
     #[argh(option)]
     to: Option<String>,
 
-    /// execution mode (plan, emit)
+    // TODO should be separate options for convenience...
+    /// execution mode (plan, emit, gen, run)
     #[argh(option, default = "Mode::EmitNinja")]
     mode: Mode,
 
@@ -156,6 +157,8 @@ fn cli_inner(driver: &Driver) -> Result<()> {
         })
     });
 
+    // TODO load configuration from a file?
+
     let req = get_request(driver, &args, &workdir)?;
     let plan = driver.plan(req).ok_or("could not find path")?;
 
@@ -183,6 +186,9 @@ fn cli_inner(driver: &Driver) -> Result<()> {
                 .current_dir(&workdir)
                 .status()
                 .map_err(|_| "ninja execution failed")?;
+
+            // TODO consider printing final result to stdout, if it wasn't mapped to a file?
+            // and also accepting input on stdin...
 
             // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
             if !args.keep && !stale_workdir {
