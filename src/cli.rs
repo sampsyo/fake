@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 enum Mode {
-    Emit,
-    Plan,
+    EmitNinja,
+    ShowPlan,
 }
 // TODO: Future modes: generate, run
 
@@ -16,8 +16,8 @@ impl FromStr for Mode {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "emit" => Ok(Mode::Emit),
-            "plan" => Ok(Mode::Plan),
+            "emit" => Ok(Mode::EmitNinja),
+            "plan" => Ok(Mode::ShowPlan),
             _ => Err("unknown mode".to_string()),
         }
     }
@@ -26,8 +26,8 @@ impl FromStr for Mode {
 impl Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Mode::Emit => write!(f, "emit"),
-            Mode::Plan => write!(f, "plan"),
+            Mode::EmitNinja => write!(f, "emit"),
+            Mode::ShowPlan => write!(f, "plan"),
         }
     }
 }
@@ -52,7 +52,7 @@ struct FakeArgs {
     to: Option<String>,
 
     /// execution mode (plan, emit)
-    #[argh(option, default = "Mode::Emit")]
+    #[argh(option, default = "Mode::EmitNinja")]
     mode: Mode,
 
     /// working directory for the build
@@ -137,12 +137,12 @@ pub fn cli(driver: &Driver) {
     });
 
     match args.mode {
-        Mode::Plan => {
+        Mode::ShowPlan => {
             for step in &plan.steps {
                 println!("{}: {}", step, driver.ops[*step].name);
             }
         }
-        Mode::Emit => {
+        Mode::EmitNinja => {
             let workdir = args.dir.unwrap_or_else(|| PathBuf::from("."));
 
             let in_path = relative_path(&args.input, &workdir);
