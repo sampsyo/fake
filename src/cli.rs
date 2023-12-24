@@ -1,4 +1,4 @@
-use crate::{Driver, Request, State};
+use crate::{Driver, Emitter, Request, State};
 use argh::FromArgs;
 use std::path::PathBuf;
 
@@ -69,5 +69,6 @@ pub fn cli(driver: &Driver) {
         println!("{}: {}", step, driver.ops[*step].name);
     }
 
-    driver.emit(plan, args.input);
+    let mut emitter = Emitter::default();
+    emitter.emit(&driver, plan, args.input);
 }

@@ -1,14 +1,14 @@
 use fake::{Driver, DriverBuilder, Emitter};
-use std::path::PathBuf;
+use std::path::Path;
 
-fn calyx_build(emitter: &mut Emitter, input: PathBuf) -> PathBuf {
+fn calyx_build(emitter: &mut Emitter, input: &Path, output: &Path) {
     writeln!(
         emitter.out,
-        "run calyx -b verilog {}",
-        input.to_string_lossy()
+        "run calyx -b verilog {} > {}",
+        input.to_string_lossy(),
+        output.to_string_lossy(),
     )
     .unwrap();
-    input
 }
 
 fn build_driver() -> Driver {
@@ -31,16 +31,15 @@ fn build_driver() -> Driver {
         calyx,
         calyx,
         |_| unimplemented!(),
-        |_, _| unimplemented!(),
+        |_, _, _| unimplemented!(),
     );
     bld.op(
         "compile Dahlia",
         dahlia,
         calyx,
         |_| unimplemented!(),
-        |_, rsrc| {
+        |_, _, _| {
             println!("run fuse");
-            rsrc
         },
     );
     bld.op(
@@ -48,7 +47,7 @@ fn build_driver() -> Driver {
         mrxl,
         calyx,
         |_| unimplemented!(),
-        |_, _| unimplemented!(),
+        |_, _, _| unimplemented!(),
     );
 
     bld.build()

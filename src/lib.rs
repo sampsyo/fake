@@ -22,7 +22,7 @@ impl StateData {
 }
 
 type EmitRules = fn(&mut Emitter) -> ();
-type EmitBuild = fn(&mut Emitter, PathBuf) -> PathBuf;
+type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
 /// An operation that transforms resources from one state to another.
 pub struct OpData {
@@ -106,18 +106,6 @@ impl Driver {
     pub fn main(&self) {
         cli::cli(self);
     }
-
-    pub fn emit(&self, plan: Plan, input: PathBuf) {
-        let mut emitter = Emitter::default();
-
-        // TODO call `rules`!
-
-        let mut filename = input;
-        for step in plan.steps {
-            let op = &self.ops[step];
-            filename = (op.build)(&mut emitter, filename);
-        }
-    }
 }
 
 #[derive(Default)]
@@ -172,12 +160,38 @@ pub struct Plan {
 
 pub struct Emitter {
     pub out: Box<dyn Write>,
+    pub workdir: PathBuf,
+    pub temp_files: Vec<PathBuf>,
 }
 
 impl Emitter {
     pub fn default() -> Self {
         Self {
             out: Box::new(std::io::stdout()),
+            workdir: PathBuf::from("."),
+            temp_files: vec![],
+        }
+    }
+
+    fn gen_filename(&mut self, ext: &str) -> PathBuf {
+        // TODO actually generate random filename, possibly here or possibly in /tmp
+        let name = self.workdir.join("TEMP_STUFF").with_extension(ext);
+        self.temp_files.push(name.clone());
+        name
+    }
+
+    pub fn emit(&mut self, driver: &Driver, plan: Plan, input: PathBuf) {
+        // TODO call `rules`!
+
+        let mut filename = input;
+        for step in plan.steps {
+            let op = &driver.ops[step];
+
+            // TODO or use destination if this is the last step
+            let outfile = self.gen_filename(&driver.states[op.output].extensions[0]);
+
+            (op.build)(self, &filename, &outfile);
+            filename = outfile;
         }
     }
 }
