@@ -105,7 +105,7 @@ pub fn cli(driver: &Driver) {
         }
         Mode::Emit => {
             let mut emitter = Emitter::default();
-            emitter.emit(&driver, plan, args.input);
+            emitter.emit(&driver, plan, &args.input, args.output.as_deref());
         }
         // TODO a future "run" mode
     }

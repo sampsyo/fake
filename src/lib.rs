@@ -162,7 +162,6 @@ pub struct Plan {
 pub struct Emitter {
     pub out: Box<dyn Write>,
     pub workdir: PathBuf,
-    pub temp_files: Vec<PathBuf>,
 }
 
 impl Emitter {
@@ -170,7 +169,6 @@ impl Emitter {
         Self {
             out: Box::new(std::io::stdout()),
             workdir: PathBuf::from("."),
-            temp_files: vec![],
         }
     }
 
@@ -178,11 +176,10 @@ impl Emitter {
         let stem = in_name.file_stem().expect("input filename missing");
         let name = self.workdir.join(stem).with_extension(ext);
         // TODO avoid collisions if we reuse extensions...
-        self.temp_files.push(name.clone());
         name
     }
 
-    pub fn emit(&mut self, driver: &Driver, plan: Plan, input: PathBuf) {
+    pub fn emit(&mut self, driver: &Driver, plan: Plan, input: &Path, output: Option<&Path>) {
         // Emit the rules for each operation used in the plan, only once.
         let mut seen_ops = HashSet::<Operation>::new();
         for step in &plan.steps {
@@ -196,12 +193,18 @@ impl Emitter {
 
         // Emit the build commands for each step in the plan.
         writeln!(self.out, "# build targets").unwrap();
-        let mut filename = input;
-        for step in plan.steps {
+        let mut filename = input.to_owned();
+        let mut it = plan.steps.iter().peekable();
+        while let Some(&step) = it.next() {
             let op = &driver.ops[step];
 
-            // TODO or use destination if this is the last step
-            let outfile = self.gen_name(&filename, &driver.states[op.output].extensions[0]);
+            // Generate a filename, or use the destination filename for the last step.
+            // TODO this whole handling of outfile/filename/etc. is terrible
+            let outfile = if it.peek().is_none() && output.is_some() {
+                output.unwrap().to_owned()
+            } else {
+                self.gen_name(&filename, &driver.states[op.output].extensions[0])
+            };
 
             (op.build)(self, &filename, &outfile);
             filename = outfile;
