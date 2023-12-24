@@ -1,4 +1,5 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
+use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -181,8 +182,16 @@ impl Emitter {
     }
 
     pub fn emit(&mut self, driver: &Driver, plan: Plan, input: PathBuf) {
-        // TODO call `rules`!
+        // Emit the rules for each operation used in the plan, only once.
+        let mut seen_ops = HashSet::<Operation>::new();
+        for step in &plan.steps {
+            if seen_ops.insert(*step) {
+                let op = &driver.ops[*step];
+                (op.rules)(self);
+            }
+        }
 
+        // Emit the build commands for each step in the plan.
         let mut filename = input;
         for step in plan.steps {
             let op = &driver.ops[step];

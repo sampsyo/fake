@@ -1,6 +1,10 @@
 use fake::{Driver, DriverBuilder, Emitter};
 use std::path::Path;
 
+fn calyx_rules(emitter: &mut Emitter) {
+    writeln!(emitter.out, "rule about calyx -b verilog $in > $out").unwrap();
+}
+
 fn calyx_build(emitter: &mut Emitter, input: &Path, output: &Path) {
     writeln!(
         emitter.out,
@@ -23,7 +27,7 @@ fn build_driver() -> Driver {
         "compile Calyx to Verilog",
         calyx,
         verilog,
-        |_| unimplemented!(),
+        calyx_rules,
         calyx_build,
     );
     bld.op(
