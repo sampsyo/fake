@@ -95,10 +95,7 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
 
 fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> Result<Request> {
     let in_path = relative_path(&args.input, workdir);
-    let out_path = match &args.output {
-        Some(out_path) => Some(relative_path(out_path, workdir)),
-        None => None,
-    };
+    let out_path = args.output.as_ref().map(|p| relative_path(p, workdir));
 
     Ok(Request {
         start_file: in_path,
@@ -112,17 +109,14 @@ fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> Result<Reque
 /// is `base`. This can always just be `path.canonical()` as a fallback, but sometimes we can
 /// opportunistically make it a little friendlier.
 fn relative_path(path: &Path, base: &Path) -> PathBuf {
-    if base == Path::new(".") {
-        path.to_path_buf()
-    } else if path.is_absolute() {
+    if base == Path::new(".") || path.is_absolute() {
         path.to_path_buf()
     } else if path.starts_with(base) {
         path.strip_prefix(base).unwrap().to_path_buf()
     } else if base.is_relative() {
         if base
             .components()
-            .find(|c| c == &std::path::Component::ParentDir)
-            .is_some()
+            .any(|c| c == std::path::Component::ParentDir)
         {
             // Too hard to handle base paths with `..`.
             path.canonicalize().unwrap()
@@ -145,7 +139,7 @@ fn generate(driver: &Driver, workdir: &Path, plan: Plan) -> Result<()> {
     std::fs::create_dir_all(workdir).map_err(|_| "could not create working directory")?;
     let ninja_path = workdir.join("build.ninja");
     let ninja_file =
-        std::fs::File::create(&ninja_path).map_err(|_| "could not create ninja file")?;
+        std::fs::File::create(ninja_path).map_err(|_| "could not create ninja file")?;
     let mut emitter = Emitter::new(Box::new(ninja_file));
     emitter.emit(driver, plan);
     Ok(())
@@ -174,15 +168,15 @@ fn cli_inner(driver: &Driver) -> Result<()> {
         }
         Mode::EmitNinja => {
             let mut emitter = Emitter::new(Box::new(std::io::stdout()));
-            emitter.emit(&driver, plan);
+            emitter.emit(driver, plan);
         }
         Mode::Generate => {
-            generate(&driver, &workdir, plan)?;
+            generate(driver, &workdir, plan)?;
         }
         Mode::Run => {
             // The `run` mode is similar to `fake --mode gen && ninja -C .fake`.
             let stale_workdir = workdir.exists();
-            generate(&driver, &workdir, plan)?;
+            generate(driver, &workdir, plan)?;
 
             // TODO configurable `ninja` command and args
             Command::new("ninja")

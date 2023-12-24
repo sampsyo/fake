@@ -96,9 +96,8 @@ impl Driver {
         let op = &self.ops[op];
         let ext = &self.states[op.output].extensions[0];
 
-        let name = PathBuf::from(stem).with_extension(ext);
-        // TODO avoid collisions if we reuse extensions...
-        name
+        // TODO avoid collisions in case we reuse extensions...
+        PathBuf::from(stem).with_extension(ext)
     }
 
     pub fn plan(&self, req: Request) -> Option<Plan> {
@@ -110,7 +109,7 @@ impl Driver {
         let mut steps: Vec<_> = path
             .into_iter()
             .map(|op| {
-                let filename = self.gen_name(&stem, op);
+                let filename = self.gen_name(stem, op);
                 (op, filename)
             })
             .collect();
@@ -124,7 +123,7 @@ impl Driver {
 
         Some(Plan {
             start: req.start_file,
-            steps: steps,
+            steps,
         })
     }
 
@@ -218,7 +217,7 @@ impl Emitter {
                 writeln!(self.out, "# {}", driver.ops[*op].name).unwrap();
                 let op = &driver.ops[*op];
                 (op.rules)(self);
-                writeln!(self.out, "").unwrap();
+                writeln!(self.out).unwrap();
             }
         }
 
@@ -232,7 +231,7 @@ impl Emitter {
         }
 
         // Mark the last file as the default target.
-        writeln!(self.out, "").unwrap();
+        writeln!(self.out).unwrap();
         writeln!(self.out, "default {}", last_file.display()).unwrap(); // TODO pass through bytes, not `display`
     }
 }
