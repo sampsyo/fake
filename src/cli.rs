@@ -64,6 +64,10 @@ struct FakeArgs {
     /// working directory for the build
     #[argh(option)]
     dir: Option<PathBuf>,
+
+    /// in run mode, keep the temporary directory
+    #[argh(switch)]
+    keep: bool,
 }
 
 type Result<T> = std::result::Result<T, &'static str>;
@@ -176,14 +180,21 @@ fn cli_inner(driver: &Driver) -> Result<()> {
             generate(&driver, &workdir, plan)?;
         }
         Mode::Run => {
-            // The `run` mode is equivalent to `fake --mode gen && ninja -C .fake`.
+            // The `run` mode is similar to `fake --mode gen && ninja -C .fake`.
+            let stale_workdir = workdir.exists();
             generate(&driver, &workdir, plan)?;
 
             // TODO configurable `ninja` command and args
             Command::new("ninja")
                 .current_dir(&workdir)
-                .spawn()
+                .status()
                 .map_err(|_| "ninja execution failed")?;
+
+            // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
+            if !args.keep && !stale_workdir {
+                std::fs::remove_dir_all(&workdir)
+                    .map_err(|_| "could not remove working directory")?;
+            }
         }
     }
 
