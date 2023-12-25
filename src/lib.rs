@@ -5,6 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub mod cli;
+pub mod config;
 
 /// The details about a given state.
 pub struct StateData {

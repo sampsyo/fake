@@ -157,7 +157,8 @@ fn cli_inner(driver: &Driver) -> Result<()> {
         })
     });
 
-    // TODO load configuration from a file?
+    // Load configuration.
+    let cfg = crate::config::Config::new().unwrap(); // TODO handle error
 
     let req = get_request(driver, &args, &workdir)?;
     let plan = driver.plan(req).ok_or("could not find path")?;
@@ -182,7 +183,7 @@ fn cli_inner(driver: &Driver) -> Result<()> {
             generate(driver, &workdir, plan)?;
 
             // TODO configurable `ninja` command and args
-            Command::new("ninja")
+            Command::new(cfg.global.ninja)
                 .current_dir(&workdir)
                 .status()
                 .map_err(|_| "ninja execution failed")?;
