@@ -1,6 +1,10 @@
 use fake::{Driver, DriverBuilder, Emitter};
 use std::path::Path;
 
+// TODO: Rethink the modularity of operators... maybe they should be traits instead of objects??
+// Things they need to encapsulate include configuration options (which could, importantly, be
+// shared between multiple operators) and setup/rule code (similarly shared?).
+
 fn calyx_rules(emitter: &mut Emitter) {
     // TODO. something about configurable variables
     // TODO utilities for Ninja generation, or use a library?
