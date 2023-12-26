@@ -36,14 +36,59 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
+// TODO probably don't need this.
 struct SimpleSetup {
     stanza: String,
 }
 
-// TODO probably don't need this.
 impl Setup for SimpleSetup {
     fn setup(&self, emitter: &mut Emitter) -> () {
         writeln!(emitter.out, "{}", self.stanza).unwrap();
+    }
+}
+
+pub struct RuleSetup {
+    vars: Vec<(String, String)>,
+    rules: Vec<(String, String)>,
+}
+
+impl Setup for RuleSetup {
+    fn setup(&self, emitter: &mut Emitter) -> () {
+        // Declare variables.
+        for (k, v) in &self.vars {
+            writeln!(emitter.out, "{} = {}", k, v).unwrap();
+        }
+
+        // Declare build rules.
+        for (name, cmd) in &self.rules {
+            writeln!(emitter.out, "rule {}", name).unwrap();
+            writeln!(emitter.out, "  command = {}", cmd).unwrap();
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct RuleBuilder {
+    vars: Vec<(String, String)>,
+    rules: Vec<(String, String)>,
+}
+
+impl RuleBuilder {
+    pub fn var(mut self, name: &str, value: &str) -> Self {
+        self.vars.push((name.to_string(), value.to_string()));
+        self
+    }
+
+    pub fn rule(mut self, name: &str, cmd: &str) -> Self {
+        self.rules.push((name.to_string(), cmd.to_string()));
+        self
+    }
+
+    pub fn build(self) -> RuleSetup {
+        RuleSetup {
+            vars: self.vars,
+            rules: self.rules,
+        }
     }
 }
 
@@ -241,14 +286,14 @@ impl DriverBuilder {
         self.ops.push(Operation { meta, impl_ })
     }
 
-    fn add_setup(&mut self, setup: Box<dyn Setup>) -> SetupRef {
-        self.setups.push(setup)
+    pub fn setup<T: Setup + 'static>(&mut self, setup: T) -> SetupRef {
+        self.setups.push(Box::new(setup))
     }
 
     pub fn setup_stanza(&mut self, stanza: &str) -> SetupRef {
-        self.add_setup(Box::new(SimpleSetup {
+        self.setup(SimpleSetup {
             stanza: stanza.to_string(),
-        }))
+        })
     }
 
     pub fn op(
