@@ -36,14 +36,14 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
-// TODO probably don't need this.
+// TODO probably don't need this?? seems unnecessary...
 struct SimpleSetup {
-    stanza: String,
+    emit: fn(&mut Emitter) -> (),
 }
 
 impl Setup for SimpleSetup {
     fn setup(&self, emitter: &mut Emitter) -> () {
-        writeln!(emitter.out, "{}", self.stanza).unwrap();
+        (self.emit)(emitter);
     }
 }
 
@@ -91,7 +91,7 @@ impl RuleBuilder {
     }
 
     pub fn add(self, bld: &mut DriverBuilder) -> SetupRef {
-        bld.setup(self.build())
+        bld.add_setup(self.build())
     }
 }
 
@@ -282,14 +282,12 @@ impl DriverBuilder {
         self.ops.push(Operation { meta, impl_ })
     }
 
-    pub fn setup<T: Setup + 'static>(&mut self, setup: T) -> SetupRef {
+    pub fn add_setup<T: Setup + 'static>(&mut self, setup: T) -> SetupRef {
         self.setups.push(Box::new(setup))
     }
 
-    pub fn setup_stanza(&mut self, stanza: &str) -> SetupRef {
-        self.setup(SimpleSetup {
-            stanza: stanza.to_string(),
-        })
+    pub fn setup(&mut self, setup_func: fn(&mut Emitter) -> ()) -> SetupRef {
+        self.add_setup(SimpleSetup { emit: setup_func })
     }
 
     pub fn op(
