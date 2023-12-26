@@ -1,4 +1,4 @@
-use fake::{Driver, DriverBuilder, Emitter};
+use fake::{cli, Driver, DriverBuilder, Emitter};
 use std::path::Path;
 
 // TODO: Rethink the modularity of operators... maybe they should be traits instead of objects??
@@ -76,5 +76,5 @@ fn build_driver() -> Driver {
 
 fn main() -> anyhow::Result<()> {
     let driver = build_driver();
-    driver.main()
+    cli::cli(&driver)
 }

@@ -142,10 +142,6 @@ impl Driver {
             .find(|(_, state_data)| state_data.name == name)
             .map(|(state, _)| state)
     }
-
-    pub fn main(&self) -> anyhow::Result<()> {
-        cli::cli(self)
-    }
 }
 
 #[derive(Default)]
