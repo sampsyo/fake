@@ -47,54 +47,6 @@ impl Setup for SimpleSetup {
     }
 }
 
-pub struct RuleSetup {
-    vars: Vec<(String, String)>,
-    rules: Vec<(String, String)>,
-}
-
-impl Setup for RuleSetup {
-    fn setup(&self, emitter: &mut Emitter) -> () {
-        // Declare variables.
-        for (k, v) in &self.vars {
-            emitter.var(k, v);
-        }
-
-        // Declare build rules.
-        for (name, cmd) in &self.rules {
-            emitter.rule(name, cmd);
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct RuleBuilder {
-    vars: Vec<(String, String)>,
-    rules: Vec<(String, String)>,
-}
-
-impl RuleBuilder {
-    pub fn var(mut self, name: &str, value: &str) -> Self {
-        self.vars.push((name.to_string(), value.to_string()));
-        self
-    }
-
-    pub fn rule(mut self, name: &str, cmd: &str) -> Self {
-        self.rules.push((name.to_string(), cmd.to_string()));
-        self
-    }
-
-    pub fn build(self) -> RuleSetup {
-        RuleSetup {
-            vars: self.vars,
-            rules: self.rules,
-        }
-    }
-
-    pub fn add(self, bld: &mut DriverBuilder) -> SetupRef {
-        bld.add_setup(self.build())
-    }
-}
-
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
 /// Metadata about an operation that controls when it applies.
