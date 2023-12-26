@@ -137,7 +137,7 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
     }
 }
 
-fn cli_inner(driver: &Driver) -> anyhow::Result<()> {
+pub fn cli(driver: &Driver) -> anyhow::Result<()> {
     let args: FakeArgs = argh::from_env();
 
     // The default working directory (if not specified) depends on the mode.
@@ -189,14 +189,4 @@ fn cli_inner(driver: &Driver) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-pub fn cli(driver: &Driver) {
-    match cli_inner(driver) {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
-        }
-    }
 }

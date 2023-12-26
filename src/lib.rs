@@ -143,8 +143,8 @@ impl Driver {
             .map(|(state, _)| state)
     }
 
-    pub fn main(&self) {
-        cli::cli(self);
+    pub fn main(&self) -> anyhow::Result<()> {
+        cli::cli(self)
     }
 }
 

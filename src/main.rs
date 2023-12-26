@@ -74,7 +74,7 @@ fn build_driver() -> Driver {
     bld.build()
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let driver = build_driver();
-    driver.main();
+    driver.main()
 }
