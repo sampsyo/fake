@@ -264,14 +264,13 @@ impl DriverBuilder {
 
     pub fn rule(
         &mut self,
-        name: &str,
         setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
         rule_name: &str,
     ) -> OpRef {
         self.add_op(
-            name,
+            rule_name,
             setup,
             input,
             output,

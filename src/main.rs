@@ -22,20 +22,8 @@ rule calyx-to-calyx
     );
     // TODO: the two backends could also be selected with a Ninja variable...
 
-    bld.rule(
-        "compile Calyx to Verilog",
-        Some(calyx_setup),
-        calyx,
-        verilog,
-        "calyx-to-verilog",
-    );
-    bld.rule(
-        "compile Calyx internally",
-        Some(calyx_setup),
-        calyx,
-        calyx,
-        "calyx-to-calyx",
-    );
+    bld.rule(Some(calyx_setup), calyx, verilog, "calyx-to-verilog");
+    bld.rule(Some(calyx_setup), calyx, calyx, "calyx-to-calyx");
 
     let dahlia_setup = bld.setup_stanza(
         "dahlia_exec = /Users/asampson/cu/research/dahlia/fuse
@@ -43,13 +31,7 @@ rule dahlia-to-calyx
   command = $dahlia_exec -b calyx --lower -l error $in -o $out",
     );
 
-    bld.rule(
-        "compile Dahlia to Calyx",
-        Some(dahlia_setup),
-        dahlia,
-        calyx,
-        "dahlia-to-calyx",
-    );
+    bld.rule(Some(dahlia_setup), dahlia, calyx, "dahlia-to-calyx");
 
     let mrxl_setup = bld.setup_stanza(
         "mrxl_exec = mrxl
@@ -57,13 +39,7 @@ rule mrxl-to-calyx
   command = $mrxl_exec $in > $out",
     );
 
-    bld.rule(
-        "compile MrXL to Calyx",
-        Some(mrxl_setup),
-        mrxl,
-        calyx,
-        "mrxl-to-calyx",
-    );
+    bld.rule(Some(mrxl_setup), mrxl, calyx, "mrxl-to-calyx");
 
     bld.build()
 }
