@@ -1,9 +1,11 @@
-use crate::{Driver, Emitter, Plan, Request, State};
+use crate::{Driver, Emitter, Request, State};
 use argh::FromArgs;
+use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::result::Result;
 use std::str::FromStr;
 
 enum Mode {
@@ -71,9 +73,7 @@ struct FakeArgs {
     keep: bool,
 }
 
-type Result<T> = std::result::Result<T, &'static str>;
-
-fn from_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
+fn from_state(driver: &Driver, args: &FakeArgs) -> Result<State, &'static str> {
     match &args.from {
         Some(name) => driver.get_state(name).ok_or("unknown --from state"),
         None => driver
@@ -82,7 +82,7 @@ fn from_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
     }
 }
 
-fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
+fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State, &'static str> {
     match &args.to {
         Some(name) => driver.get_state(name).ok_or("unknown --to state"),
         None => match &args.output {
@@ -94,7 +94,7 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State> {
     }
 }
 
-fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> Result<Request> {
+fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> Result<Request, &'static str> {
     let in_path = relative_path(&args.input, workdir);
     let out_path = args.output.as_ref().map(|p| relative_path(p, workdir));
 
@@ -136,17 +136,7 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
     }
 }
 
-fn generate(driver: &Driver, workdir: &Path, plan: Plan) -> Result<()> {
-    std::fs::create_dir_all(workdir).map_err(|_| "could not create working directory")?;
-    let ninja_path = workdir.join("build.ninja");
-    let ninja_file =
-        std::fs::File::create(ninja_path).map_err(|_| "could not create ninja file")?;
-    let mut emitter = Emitter::new(Box::new(ninja_file));
-    emitter.emit(driver, plan);
-    Ok(())
-}
-
-fn cli_inner(driver: &Driver) -> Result<()> {
+fn cli_inner(driver: &Driver) -> Result<(), Box<dyn Error>> {
     let args: FakeArgs = argh::from_env();
 
     // The default working directory (if not specified) depends on the mode.
@@ -171,30 +161,27 @@ fn cli_inner(driver: &Driver) -> Result<()> {
             }
         }
         Mode::EmitNinja => {
-            let mut emitter = Emitter::new(Box::new(std::io::stdout()));
-            emitter.emit(driver, plan);
+            Emitter::emit_to_stdout(driver, plan)?;
         }
         Mode::Generate => {
-            generate(driver, &workdir, plan)?;
+            Emitter::emit_to_dir(driver, plan, &workdir)?;
         }
         Mode::Run => {
             // The `run` mode is similar to `fake --mode gen && ninja -C .fake`.
             let stale_workdir = workdir.exists();
-            generate(driver, &workdir, plan)?;
+            Emitter::emit_to_dir(driver, plan, &workdir)?;
 
-            // TODO configurable `ninja` command and args
+            // Run `ninja` in the working directory.
             Command::new(cfg.global.ninja)
                 .current_dir(&workdir)
-                .status()
-                .map_err(|_| "ninja execution failed")?;
+                .status()?;
 
             // TODO consider printing final result to stdout, if it wasn't mapped to a file?
             // and also accepting input on stdin...
 
             // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
             if !args.keep && !stale_workdir {
-                std::fs::remove_dir_all(&workdir)
-                    .map_err(|_| "could not remove working directory")?;
+                std::fs::remove_dir_all(&workdir)?
             }
         }
     }

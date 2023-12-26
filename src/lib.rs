@@ -210,7 +210,7 @@ impl Emitter {
         Self { out }
     }
 
-    pub fn emit(&mut self, driver: &Driver, plan: Plan) {
+    pub fn emit(&mut self, driver: &Driver, plan: Plan) -> Result<(), std::io::Error> {
         // Emit the rules for each operation used in the plan, only once.
         let mut seen_ops = HashSet::<Operation>::new();
         for (op, _) in &plan.steps {
@@ -218,12 +218,12 @@ impl Emitter {
                 writeln!(self.out, "# {}", driver.ops[*op].name).unwrap();
                 let op = &driver.ops[*op];
                 (op.rules)(self);
-                writeln!(self.out).unwrap();
+                writeln!(self.out)?;
             }
         }
 
         // Emit the build commands for each step in the plan.
-        writeln!(self.out, "# build targets").unwrap();
+        writeln!(self.out, "# build targets")?;
         let mut last_file = plan.start;
         for (op, out_file) in plan.steps {
             let op = &driver.ops[op];
@@ -232,7 +232,25 @@ impl Emitter {
         }
 
         // Mark the last file as the default target.
-        writeln!(self.out).unwrap();
-        writeln!(self.out, "default {}", last_file.display()).unwrap(); // TODO pass through bytes, not `display`
+        writeln!(self.out)?;
+        writeln!(self.out, "default {}", last_file.display())?; // TODO pass through bytes, not `display`
+
+        Ok(())
+    }
+
+    /// Print the `build.ninja` file to stdout.
+    pub fn emit_to_stdout(driver: &Driver, plan: Plan) -> Result<(), std::io::Error> {
+        let mut emitter = Self::new(Box::new(std::io::stdout()));
+        emitter.emit(driver, plan)
+    }
+
+    /// Ensure that a directory exists and write `build.ninja` inside it.
+    pub fn emit_to_dir(driver: &Driver, plan: Plan, dir: &Path) -> Result<(), std::io::Error> {
+        std::fs::create_dir_all(dir)?;
+        let ninja_path = dir.join("build.ninja");
+        let ninja_file = std::fs::File::create(ninja_path)?;
+
+        let mut emitter = Self::new(Box::new(ninja_file));
+        emitter.emit(driver, plan)
     }
 }
