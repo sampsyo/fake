@@ -25,7 +25,28 @@ impl State {
     }
 }
 
-type EmitRules = fn(&mut Emitter) -> ();
+/// A generated Ninja setup stanza.
+/// TODO: Should these have, like, names and stuff?
+pub trait Setup {
+    fn setup(&self, emitter: &mut Emitter) -> ();
+}
+
+/// A reference to a setup.
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct SetupRef(u32);
+entity_impl!(SetupRef, "setup");
+
+struct SimpleSetup {
+    stanza: String,
+}
+
+// TODO probably don't need this.
+impl Setup for SimpleSetup {
+    fn setup(&self, emitter: &mut Emitter) -> () {
+        writeln!(emitter.out, "{}", self.stanza).unwrap();
+    }
+}
+
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
 /// Metadata about an operation that controls when it applies.
@@ -33,11 +54,11 @@ struct OpMeta {
     pub name: String,
     pub input: StateRef,
     pub output: StateRef,
+    pub setup: Option<SetupRef>,
 }
 
 /// The actual Ninja-generating machinery for an operation.
 trait OpImpl {
-    fn rules(&self, emitter: &mut Emitter) -> ();
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> ();
 }
 
@@ -52,15 +73,10 @@ pub struct Operation {
 /// An Operation that just encapulates closures to do its work.
 /// TODO do we need this?
 pub struct SimpleOp {
-    pub rules: EmitRules,
     pub build: EmitBuild,
 }
 
 impl OpImpl for SimpleOp {
-    fn rules(&self, emitter: &mut Emitter) -> () {
-        (self.rules)(emitter)
-    }
-
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
         (self.build)(emitter, input, output)
     }
@@ -69,14 +85,9 @@ impl OpImpl for SimpleOp {
 /// An operation that works by applying a Ninja rule.
 pub struct RuleOp {
     pub rule_name: String,
-    pub rule_def: String,
 }
 
 impl OpImpl for RuleOp {
-    fn rules(&self, emitter: &mut Emitter) -> () {
-        writeln!(emitter.out, "{}", self.rule_def).unwrap();
-    }
-
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
         writeln!(
             emitter.out,
@@ -95,6 +106,7 @@ pub struct OpRef(u32);
 entity_impl!(OpRef, "operation");
 
 pub struct Driver {
+    pub setups: PrimaryMap<SetupRef, Box<dyn Setup>>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
 }
@@ -199,6 +211,7 @@ impl Driver {
 
 #[derive(Default)]
 pub struct DriverBuilder {
+    setups: PrimaryMap<SetupRef, Box<dyn Setup>>,
     states: PrimaryMap<StateRef, State>,
     ops: PrimaryMap<OpRef, Operation>,
 }
@@ -214,50 +227,63 @@ impl DriverBuilder {
     fn add_op(
         &mut self,
         name: &str,
+        setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
         impl_: Box<dyn OpImpl>,
     ) -> OpRef {
         let meta = OpMeta {
             name: name.to_string(),
+            setup,
             input,
             output,
         };
         self.ops.push(Operation { meta, impl_ })
     }
 
+    fn add_setup(&mut self, setup: Box<dyn Setup>) -> SetupRef {
+        self.setups.push(setup)
+    }
+
+    pub fn setup_stanza(&mut self, stanza: &str) -> SetupRef {
+        self.add_setup(Box::new(SimpleSetup {
+            stanza: stanza.to_string(),
+        }))
+    }
+
     pub fn op(
         &mut self,
         name: &str,
+        setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
-        rules: EmitRules,
         build: EmitBuild,
     ) -> OpRef {
-        self.add_op(name, input, output, Box::new(SimpleOp { rules, build }))
+        self.add_op(name, setup, input, output, Box::new(SimpleOp { build }))
     }
 
     pub fn rule(
         &mut self,
         name: &str,
+        setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
         rule_name: &str,
-        rule_def: &str,
     ) -> OpRef {
         self.add_op(
             name,
+            setup,
             input,
             output,
             Box::new(RuleOp {
                 rule_name: rule_name.to_string(),
-                rule_def: rule_def.to_string(),
             }),
         )
     }
 
     pub fn build(self) -> Driver {
         Driver {
+            setups: self.setups,
             states: self.states,
             ops: self.ops,
         }
@@ -288,14 +314,15 @@ impl Emitter {
     }
 
     pub fn emit(&mut self, driver: &Driver, plan: Plan) -> Result<(), std::io::Error> {
-        // Emit the rules for each operation used in the plan, only once.
-        let mut seen_ops = HashSet::<OpRef>::new();
+        // Emit the setup for each operation used in the plan, only once.
+        let mut done_setups = HashSet::<SetupRef>::new();
         for (op, _) in &plan.steps {
-            if seen_ops.insert(*op) {
-                writeln!(self.out, "# {}", driver.ops[*op].meta.name).unwrap();
-                let op = &driver.ops[*op];
-                op.impl_.rules(self);
-                writeln!(self.out)?;
+            if let Some(setup) = driver.ops[*op].meta.setup {
+                if done_setups.insert(setup) {
+                    writeln!(self.out, "# {}", setup).unwrap(); // TODO more descriptive name
+                    driver.setups[setup].setup(self);
+                    writeln!(self.out)?;
+                }
             }
         }
 

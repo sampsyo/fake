@@ -12,37 +12,35 @@ fn build_driver() -> Driver {
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv"]);
 
-    bld.rule(
-        "compile Calyx to Verilog",
-        calyx,
-        verilog,
-        "calyx",
+    let calyx_setup = bld.setup_stanza(
         "calyx_base = /Users/asampson/cu/research/calyx
 calyx_exe = $calyx_base/target/debug/calyx
 rule calyx
   command = $calyx_exe -l $calyx_base -b verilog $in -o $out",
     );
+
+    bld.rule(
+        "compile Calyx to Verilog",
+        Some(calyx_setup),
+        calyx,
+        verilog,
+        "calyx",
+    );
     bld.op(
         "compile Calyx internally",
+        None,
         calyx,
         calyx,
-        |_| unimplemented!(),
         |_, _, _| unimplemented!(),
     );
-    bld.op(
-        "compile Dahlia",
-        dahlia,
-        calyx,
-        |_| unimplemented!(),
-        |_, _, _| {
-            println!("run fuse");
-        },
-    );
+    bld.op("compile Dahlia", None, dahlia, calyx, |_, _, _| {
+        println!("run fuse");
+    });
     bld.op(
         "compile MrXL",
+        None,
         mrxl,
         calyx,
-        |_| unimplemented!(),
         |_, _, _| unimplemented!(),
     );
 
