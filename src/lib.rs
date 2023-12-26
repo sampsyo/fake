@@ -90,6 +90,10 @@ impl RuleBuilder {
             rules: self.rules,
         }
     }
+
+    pub fn add(self, bld: &mut DriverBuilder) -> SetupRef {
+        bld.setup(self.build())
+    }
 }
 
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
