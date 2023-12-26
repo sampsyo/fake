@@ -1,4 +1,4 @@
-use crate::{Driver, Emitter, Request, State};
+use crate::{Driver, Emitter, Request, StateRef};
 use anyhow::{anyhow, Context};
 use argh::FromArgs;
 use std::fmt::Display;
@@ -72,7 +72,7 @@ struct FakeArgs {
     keep: bool,
 }
 
-fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<State> {
+fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
     match &args.from {
         Some(name) => driver
             .get_state(name)
@@ -83,7 +83,7 @@ fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<State> {
     }
 }
 
-fn to_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<State> {
+fn to_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
     match &args.to {
         Some(name) => driver.get_state(name).ok_or(anyhow!("unknown --to state")),
         None => match &args.output {

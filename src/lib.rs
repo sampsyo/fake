@@ -8,16 +8,17 @@ pub mod cli;
 pub mod config;
 
 /// The details about a given state.
-pub struct StateData {
+pub struct State {
     pub name: String,
     pub extensions: Vec<String>,
 }
+
 /// A reference to a state.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct State(u32);
-entity_impl!(State, "state");
+pub struct StateRef(u32);
+entity_impl!(StateRef, "state");
 
-impl StateData {
+impl State {
     /// Check whether a filename extension indicates this state.
     fn ext_matches(&self, ext: &str) -> bool {
         self.extensions.iter().any(|e| e == ext)
@@ -28,35 +29,35 @@ type EmitRules = fn(&mut Emitter) -> ();
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
 /// An operation that transforms resources from one state to another.
-pub struct OpData {
+pub struct Operation {
     pub name: String,
-    pub input: State,
-    pub output: State,
+    pub input: StateRef,
+    pub output: StateRef,
     pub rules: EmitRules,
     pub build: EmitBuild,
 }
 
 /// A reference to an operation.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct Operation(u32);
-entity_impl!(Operation, "operation");
+pub struct OpRef(u32);
+entity_impl!(OpRef, "operation");
 
 pub struct Driver {
-    pub states: PrimaryMap<State, StateData>,
-    pub ops: PrimaryMap<Operation, OpData>,
+    pub states: PrimaryMap<StateRef, State>,
+    pub ops: PrimaryMap<OpRef, Operation>,
 }
 
 impl Driver {
-    pub fn find_path(&self, start: State, end: State) -> Option<Vec<Operation>> {
+    pub fn find_path(&self, start: StateRef, end: StateRef) -> Option<Vec<OpRef>> {
         // Our start state is the input.
-        let mut visited = SecondaryMap::<State, bool>::new();
+        let mut visited = SecondaryMap::<StateRef, bool>::new();
         visited[start] = true;
 
         // Build the incoming edges for each vertex.
-        let mut breadcrumbs = SecondaryMap::<State, Option<Operation>>::new();
+        let mut breadcrumbs = SecondaryMap::<StateRef, Option<OpRef>>::new();
 
         // Breadth-first search.
-        let mut state_queue: Vec<State> = vec![start];
+        let mut state_queue: Vec<StateRef> = vec![start];
         while !state_queue.is_empty() {
             let cur_state = state_queue.remove(0);
 
@@ -76,7 +77,7 @@ impl Driver {
         }
 
         // Traverse the breadcrumbs backward to build up the path back from output to input.
-        let mut op_path: Vec<Operation> = vec![];
+        let mut op_path: Vec<OpRef> = vec![];
         let mut cur_state = end;
         while cur_state != start {
             match breadcrumbs[cur_state] {
@@ -92,7 +93,7 @@ impl Driver {
         Some(op_path)
     }
 
-    fn gen_name(&self, stem: &OsStr, op: Operation) -> PathBuf {
+    fn gen_name(&self, stem: &OsStr, op: OpRef) -> PathBuf {
         // Pick an appropriate extension for the output of this operation.
         let op = &self.ops[op];
         let ext = &self.states[op.output].extensions[0];
@@ -128,7 +129,7 @@ impl Driver {
         })
     }
 
-    pub fn guess_state(&self, path: &Path) -> Option<State> {
+    pub fn guess_state(&self, path: &Path) -> Option<StateRef> {
         let ext = path.extension()?.to_str()?;
         self.states
             .iter()
@@ -136,7 +137,7 @@ impl Driver {
             .map(|(state, _)| state)
     }
 
-    pub fn get_state(&self, name: &str) -> Option<State> {
+    pub fn get_state(&self, name: &str) -> Option<StateRef> {
         self.states
             .iter()
             .find(|(_, state_data)| state_data.name == name)
@@ -146,13 +147,13 @@ impl Driver {
 
 #[derive(Default)]
 pub struct DriverBuilder {
-    states: PrimaryMap<State, StateData>,
-    ops: PrimaryMap<Operation, OpData>,
+    states: PrimaryMap<StateRef, State>,
+    ops: PrimaryMap<OpRef, Operation>,
 }
 
 impl DriverBuilder {
-    pub fn state(&mut self, name: &str, extensions: &[&str]) -> State {
-        self.states.push(StateData {
+    pub fn state(&mut self, name: &str, extensions: &[&str]) -> StateRef {
+        self.states.push(State {
             name: name.to_string(),
             extensions: extensions.iter().map(|s| s.to_string()).collect(),
         })
@@ -161,12 +162,12 @@ impl DriverBuilder {
     pub fn op(
         &mut self,
         name: &str,
-        input: State,
-        output: State,
+        input: StateRef,
+        output: StateRef,
         rules: EmitRules,
         build: EmitBuild,
-    ) -> Operation {
-        self.ops.push(OpData {
+    ) -> OpRef {
+        self.ops.push(Operation {
             name: name.to_string(),
             input,
             output,
@@ -185,16 +186,16 @@ impl DriverBuilder {
 
 #[derive(Debug)]
 pub struct Request {
-    pub start_state: State,
+    pub start_state: StateRef,
     pub start_file: PathBuf,
-    pub end_state: State,
+    pub end_state: StateRef,
     pub end_file: Option<PathBuf>,
 }
 
 #[derive(Debug)]
 pub struct Plan {
     pub start: PathBuf,
-    pub steps: Vec<(Operation, PathBuf)>,
+    pub steps: Vec<(OpRef, PathBuf)>,
 }
 
 pub struct Emitter {
@@ -208,7 +209,7 @@ impl Emitter {
 
     pub fn emit(&mut self, driver: &Driver, plan: Plan) -> Result<(), std::io::Error> {
         // Emit the rules for each operation used in the plan, only once.
-        let mut seen_ops = HashSet::<Operation>::new();
+        let mut seen_ops = HashSet::<OpRef>::new();
         for (op, _) in &plan.steps {
             if seen_ops.insert(*op) {
                 writeln!(self.out, "# {}", driver.ops[*op].name).unwrap();
