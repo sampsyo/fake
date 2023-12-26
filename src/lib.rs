@@ -28,13 +28,45 @@ impl State {
 type EmitRules = fn(&mut Emitter) -> ();
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
-/// An operation that transforms resources from one state to another.
-pub struct Operation {
+/// An operation that transforms files from one state to another.
+pub trait Operation {
+    fn name(&self) -> &str;
+    fn input(&self) -> StateRef;
+    fn output(&self) -> StateRef;
+    fn rules(&self, emitter: &mut Emitter) -> ();
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> ();
+}
+
+/// An Operation that just encapulates data.
+/// TODO do we need this?
+pub struct SimpleOp {
     pub name: String,
     pub input: StateRef,
     pub output: StateRef,
     pub rules: EmitRules,
     pub build: EmitBuild,
+}
+
+impl Operation for SimpleOp {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn input(&self) -> StateRef {
+        self.input
+    }
+
+    fn output(&self) -> StateRef {
+        self.output
+    }
+
+    fn rules(&self, emitter: &mut Emitter) -> () {
+        (self.rules)(emitter)
+    }
+
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
+        (self.build)(emitter, input, output)
+    }
 }
 
 /// A reference to an operation.
@@ -44,7 +76,7 @@ entity_impl!(OpRef, "operation");
 
 pub struct Driver {
     pub states: PrimaryMap<StateRef, State>,
-    pub ops: PrimaryMap<OpRef, Operation>,
+    pub ops: PrimaryMap<OpRef, Box<dyn Operation>>,
 }
 
 impl Driver {
@@ -68,10 +100,10 @@ impl Driver {
 
             // Traverse any edge from the current state to an unvisited state.
             for (op, opdata) in self.ops.iter() {
-                if opdata.input == cur_state && !visited[opdata.output] {
-                    state_queue.push(opdata.output);
-                    visited[opdata.output] = true;
-                    breadcrumbs[opdata.output] = Some(op);
+                if opdata.input() == cur_state && !visited[opdata.output()] {
+                    state_queue.push(opdata.output());
+                    visited[opdata.output()] = true;
+                    breadcrumbs[opdata.output()] = Some(op);
                 }
             }
         }
@@ -83,7 +115,7 @@ impl Driver {
             match breadcrumbs[cur_state] {
                 Some(op) => {
                     op_path.push(op);
-                    cur_state = self.ops[op].input;
+                    cur_state = self.ops[op].input();
                 }
                 None => return None,
             }
@@ -96,7 +128,7 @@ impl Driver {
     fn gen_name(&self, stem: &OsStr, op: OpRef) -> PathBuf {
         // Pick an appropriate extension for the output of this operation.
         let op = &self.ops[op];
-        let ext = &self.states[op.output].extensions[0];
+        let ext = &self.states[op.output()].extensions[0];
 
         // TODO avoid collisions in case we reuse extensions...
         PathBuf::from(stem).with_extension(ext)
@@ -148,7 +180,7 @@ impl Driver {
 #[derive(Default)]
 pub struct DriverBuilder {
     states: PrimaryMap<StateRef, State>,
-    ops: PrimaryMap<OpRef, Operation>,
+    ops: PrimaryMap<OpRef, Box<dyn Operation>>,
 }
 
 impl DriverBuilder {
@@ -167,13 +199,13 @@ impl DriverBuilder {
         rules: EmitRules,
         build: EmitBuild,
     ) -> OpRef {
-        self.ops.push(Operation {
+        self.ops.push(Box::new(SimpleOp {
             name: name.to_string(),
             input,
             output,
             rules,
             build,
-        })
+        }))
     }
 
     pub fn build(self) -> Driver {
@@ -212,9 +244,9 @@ impl Emitter {
         let mut seen_ops = HashSet::<OpRef>::new();
         for (op, _) in &plan.steps {
             if seen_ops.insert(*op) {
-                writeln!(self.out, "# {}", driver.ops[*op].name).unwrap();
+                writeln!(self.out, "# {}", driver.ops[*op].name()).unwrap();
                 let op = &driver.ops[*op];
-                (op.rules)(self);
+                op.rules(self);
                 writeln!(self.out)?;
             }
         }
@@ -224,7 +256,7 @@ impl Emitter {
         let mut last_file = plan.start;
         for (op, out_file) in plan.steps {
             let op = &driver.ops[op];
-            (op.build)(self, &last_file, &out_file);
+            op.build(self, &last_file, &out_file);
             last_file = out_file;
         }
 
