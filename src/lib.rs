@@ -56,13 +56,12 @@ impl Setup for RuleSetup {
     fn setup(&self, emitter: &mut Emitter) -> () {
         // Declare variables.
         for (k, v) in &self.vars {
-            writeln!(emitter.out, "{} = {}", k, v).unwrap();
+            emitter.var(k, v);
         }
 
         // Declare build rules.
         for (name, cmd) in &self.rules {
-            writeln!(emitter.out, "rule {}", name).unwrap();
-            writeln!(emitter.out, "  command = {}", cmd).unwrap();
+            emitter.rule(name, cmd);
         }
     }
 }
@@ -138,14 +137,7 @@ pub struct RuleOp {
 
 impl OpImpl for RuleOp {
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
-        writeln!(
-            emitter.out,
-            "build {}: {} {}",
-            output.to_string_lossy(), // TODO pass through actual bytes
-            self.rule_name,
-            input.to_string_lossy(), // likewise
-        )
-        .unwrap();
+        emitter.build(&self.rule_name, input, output);
     }
 }
 
@@ -404,5 +396,25 @@ impl Emitter {
 
         let mut emitter = Self::new(Box::new(ninja_file));
         emitter.emit(driver, plan)
+    }
+
+    pub fn var(&mut self, name: &str, value: &str) {
+        writeln!(self.out, "{} = {}", name, value).unwrap();
+    }
+
+    pub fn rule(&mut self, name: &str, command: &str) {
+        writeln!(self.out, "rule {}", name).unwrap();
+        writeln!(self.out, "  command = {}", command).unwrap();
+    }
+
+    pub fn build(&mut self, rule: &str, input: &Path, output: &Path) {
+        writeln!(
+            self.out,
+            "build {}: {} {}",
+            output.to_string_lossy(), // TODO pass through actual bytes
+            rule,
+            input.to_string_lossy(), // likewise
+        )
+        .unwrap();
     }
 }
