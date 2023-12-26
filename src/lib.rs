@@ -36,14 +36,11 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
-// TODO probably don't need this?? seems unnecessary...
-struct SimpleSetup {
-    emit: fn(&mut Emitter) -> (),
-}
+type EmitSetup = fn(&mut Emitter) -> ();
 
-impl Setup for SimpleSetup {
+impl Setup for EmitSetup {
     fn setup(&self, emitter: &mut Emitter) -> () {
-        (self.emit)(emitter);
+        self(emitter)
     }
 }
 
@@ -238,8 +235,8 @@ impl DriverBuilder {
         self.setups.push(Box::new(setup))
     }
 
-    pub fn setup(&mut self, setup_func: fn(&mut Emitter) -> ()) -> SetupRef {
-        self.add_setup(SimpleSetup { emit: setup_func })
+    pub fn setup(&mut self, func: EmitSetup) -> SetupRef {
+        self.add_setup(func)
     }
 
     pub fn op(
