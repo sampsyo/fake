@@ -28,39 +28,35 @@ impl State {
 type EmitRules = fn(&mut Emitter) -> ();
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
-/// An operation that transforms files from one state to another.
-/// TODO: Separate name/input/output from rules/build?
-pub trait Operation {
-    fn name(&self) -> &str;
-    fn input(&self) -> StateRef;
-    fn output(&self) -> StateRef;
+/// Metadata about an operation that controls when it applies.
+struct OpMeta {
+    pub name: String,
+    pub input: StateRef,
+    pub output: StateRef,
+}
+
+/// The actual Ninja-generating machinery for an operation.
+trait OpImpl {
     fn rules(&self, emitter: &mut Emitter) -> ();
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> ();
 }
 
-/// An Operation that just encapulates data.
+/// An Operation transforms files from one State to another.
+/// TODO: Someday, I would like to represent these as separate vectors (struct-of-arrays). This may
+/// require switching from `cranelift-entity` to `id-arena`?
+pub struct Operation {
+    meta: OpMeta,
+    impl_: Box<dyn OpImpl>,
+}
+
+/// An Operation that just encapulates closures to do its work.
 /// TODO do we need this?
 pub struct SimpleOp {
-    pub name: String,
-    pub input: StateRef,
-    pub output: StateRef,
     pub rules: EmitRules,
     pub build: EmitBuild,
 }
 
-impl Operation for SimpleOp {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn input(&self) -> StateRef {
-        self.input
-    }
-
-    fn output(&self) -> StateRef {
-        self.output
-    }
-
+impl OpImpl for SimpleOp {
     fn rules(&self, emitter: &mut Emitter) -> () {
         (self.rules)(emitter)
     }
@@ -72,26 +68,11 @@ impl Operation for SimpleOp {
 
 /// An operation that works by applying a Ninja rule.
 pub struct RuleOp {
-    pub name: String,
-    pub input: StateRef,
-    pub output: StateRef,
     pub rule_name: String,
     pub rule_def: String,
 }
 
-impl Operation for RuleOp {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn input(&self) -> StateRef {
-        self.input
-    }
-
-    fn output(&self) -> StateRef {
-        self.output
-    }
-
+impl OpImpl for RuleOp {
     fn rules(&self, emitter: &mut Emitter) -> () {
         writeln!(emitter.out, "{}", self.rule_def).unwrap();
     }
@@ -115,7 +96,7 @@ entity_impl!(OpRef, "operation");
 
 pub struct Driver {
     pub states: PrimaryMap<StateRef, State>,
-    pub ops: PrimaryMap<OpRef, Box<dyn Operation>>,
+    pub ops: PrimaryMap<OpRef, Operation>,
 }
 
 impl Driver {
@@ -138,11 +119,11 @@ impl Driver {
             }
 
             // Traverse any edge from the current state to an unvisited state.
-            for (op, opdata) in self.ops.iter() {
-                if opdata.input() == cur_state && !visited[opdata.output()] {
-                    state_queue.push(opdata.output());
-                    visited[opdata.output()] = true;
-                    breadcrumbs[opdata.output()] = Some(op);
+            for (op_ref, op) in self.ops.iter() {
+                if op.meta.input == cur_state && !visited[op.meta.output] {
+                    state_queue.push(op.meta.output);
+                    visited[op.meta.output] = true;
+                    breadcrumbs[op.meta.output] = Some(op_ref);
                 }
             }
         }
@@ -154,7 +135,7 @@ impl Driver {
             match breadcrumbs[cur_state] {
                 Some(op) => {
                     op_path.push(op);
-                    cur_state = self.ops[op].input();
+                    cur_state = self.ops[op].meta.input;
                 }
                 None => return None,
             }
@@ -167,7 +148,7 @@ impl Driver {
     fn gen_name(&self, stem: &OsStr, op: OpRef) -> PathBuf {
         // Pick an appropriate extension for the output of this operation.
         let op = &self.ops[op];
-        let ext = &self.states[op.output()].extensions[0];
+        let ext = &self.states[op.meta.output].extensions[0];
 
         // TODO avoid collisions in case we reuse extensions...
         PathBuf::from(stem).with_extension(ext)
@@ -219,7 +200,7 @@ impl Driver {
 #[derive(Default)]
 pub struct DriverBuilder {
     states: PrimaryMap<StateRef, State>,
-    ops: PrimaryMap<OpRef, Box<dyn Operation>>,
+    ops: PrimaryMap<OpRef, Operation>,
 }
 
 impl DriverBuilder {
@@ -230,6 +211,21 @@ impl DriverBuilder {
         })
     }
 
+    fn add_op(
+        &mut self,
+        name: &str,
+        input: StateRef,
+        output: StateRef,
+        impl_: Box<dyn OpImpl>,
+    ) -> OpRef {
+        let meta = OpMeta {
+            name: name.to_string(),
+            input,
+            output,
+        };
+        self.ops.push(Operation { meta, impl_ })
+    }
+
     pub fn op(
         &mut self,
         name: &str,
@@ -238,13 +234,7 @@ impl DriverBuilder {
         rules: EmitRules,
         build: EmitBuild,
     ) -> OpRef {
-        self.ops.push(Box::new(SimpleOp {
-            name: name.to_string(),
-            input,
-            output,
-            rules,
-            build,
-        }))
+        self.add_op(name, input, output, Box::new(SimpleOp { rules, build }))
     }
 
     pub fn rule(
@@ -255,13 +245,15 @@ impl DriverBuilder {
         rule_name: &str,
         rule_def: &str,
     ) -> OpRef {
-        self.ops.push(Box::new(RuleOp {
-            name: name.to_string(),
+        self.add_op(
+            name,
             input,
             output,
-            rule_name: rule_name.to_string(),
-            rule_def: rule_def.to_string(),
-        }))
+            Box::new(RuleOp {
+                rule_name: rule_name.to_string(),
+                rule_def: rule_def.to_string(),
+            }),
+        )
     }
 
     pub fn build(self) -> Driver {
@@ -300,9 +292,9 @@ impl Emitter {
         let mut seen_ops = HashSet::<OpRef>::new();
         for (op, _) in &plan.steps {
             if seen_ops.insert(*op) {
-                writeln!(self.out, "# {}", driver.ops[*op].name()).unwrap();
+                writeln!(self.out, "# {}", driver.ops[*op].meta.name).unwrap();
                 let op = &driver.ops[*op];
-                op.rules(self);
+                op.impl_.rules(self);
                 writeln!(self.out)?;
             }
         }
@@ -312,7 +304,7 @@ impl Emitter {
         let mut last_file = plan.start;
         for (op, out_file) in plan.steps {
             let op = &driver.ops[op];
-            op.build(self, &last_file, &out_file);
+            op.impl_.build(self, &last_file, &out_file);
             last_file = out_file;
         }
 

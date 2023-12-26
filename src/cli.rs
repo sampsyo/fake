@@ -158,7 +158,12 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
         Mode::ShowPlan => {
             println!("start: {}", plan.start.display());
             for (op, file) in &plan.steps {
-                println!("{}: {} -> {}", op, driver.ops[*op].name(), file.display());
+                println!(
+                    "{}: {} -> {}",
+                    op,
+                    driver.ops[*op].meta.name,
+                    file.display()
+                );
             }
         }
         Mode::EmitNinja => {
