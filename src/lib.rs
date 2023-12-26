@@ -44,8 +44,6 @@ impl Setup for EmitSetup {
     }
 }
 
-type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
-
 /// Metadata about an operation that controls when it applies.
 struct OpMeta {
     pub name: String,
@@ -59,24 +57,20 @@ trait OpImpl {
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> ();
 }
 
+type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
+
+impl OpImpl for EmitBuild {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
+        (self)(emitter, input, output)
+    }
+}
+
 /// An Operation transforms files from one State to another.
 /// TODO: Someday, I would like to represent these as separate vectors (struct-of-arrays). This may
 /// require switching from `cranelift-entity` to `id-arena`?
 pub struct Operation {
     meta: OpMeta,
     impl_: Box<dyn OpImpl>,
-}
-
-/// An Operation that just encapulates closures to do its work.
-/// TODO do we need this?
-pub struct SimpleOp {
-    pub build: EmitBuild,
-}
-
-impl OpImpl for SimpleOp {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
-        (self.build)(emitter, input, output)
-    }
 }
 
 /// An operation that works by applying a Ninja rule.
@@ -247,7 +241,7 @@ impl DriverBuilder {
         output: StateRef,
         build: EmitBuild,
     ) -> OpRef {
-        self.add_op(name, setup, input, output, Box::new(SimpleOp { build }))
+        self.add_op(name, setup, input, output, Box::new(build))
     }
 
     pub fn rule(
