@@ -29,6 +29,7 @@ type EmitRules = fn(&mut Emitter) -> ();
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
 /// An operation that transforms files from one state to another.
+/// TODO: Separate name/input/output from rules/build?
 pub trait Operation {
     fn name(&self) -> &str;
     fn input(&self) -> StateRef;
@@ -66,6 +67,44 @@ impl Operation for SimpleOp {
 
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
         (self.build)(emitter, input, output)
+    }
+}
+
+/// An operation that works by applying a Ninja rule.
+pub struct RuleOp {
+    pub name: String,
+    pub input: StateRef,
+    pub output: StateRef,
+    pub rule_name: String,
+    pub rule_def: String,
+}
+
+impl Operation for RuleOp {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn input(&self) -> StateRef {
+        self.input
+    }
+
+    fn output(&self) -> StateRef {
+        self.output
+    }
+
+    fn rules(&self, emitter: &mut Emitter) -> () {
+        writeln!(emitter.out, "{}", self.rule_def).unwrap();
+    }
+
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
+        writeln!(
+            emitter.out,
+            "build {}: {} {}",
+            output.to_string_lossy(), // TODO pass through actual bytes
+            self.rule_name,
+            input.to_string_lossy(), // likewise
+        )
+        .unwrap();
     }
 }
 
@@ -205,6 +244,23 @@ impl DriverBuilder {
             output,
             rules,
             build,
+        }))
+    }
+
+    pub fn rule(
+        &mut self,
+        name: &str,
+        input: StateRef,
+        output: StateRef,
+        rule_name: &str,
+        rule_def: &str,
+    ) -> OpRef {
+        self.ops.push(Box::new(RuleOp {
+            name: name.to_string(),
+            input,
+            output,
+            rule_name: rule_name.to_string(),
+            rule_def: rule_def.to_string(),
         }))
     }
 

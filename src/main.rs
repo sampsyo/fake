@@ -1,36 +1,8 @@
-use fake::{cli, Driver, DriverBuilder, Emitter};
-use std::path::Path;
+use fake::{cli, Driver, DriverBuilder};
 
 // TODO: Rethink the modularity of operators... maybe they should be traits instead of objects??
 // Things they need to encapsulate include configuration options (which could, importantly, be
 // shared between multiple operators) and setup/rule code (similarly shared?).
-
-fn calyx_rules(emitter: &mut Emitter) {
-    // TODO. something about configurable variables
-    // TODO utilities for Ninja generation, or use a library?
-    writeln!(
-        emitter.out,
-        "calyx_base = /Users/asampson/cu/research/calyx"
-    )
-    .unwrap();
-    writeln!(emitter.out, "calyx_exe = $calyx_base/target/debug/calyx").unwrap();
-    writeln!(emitter.out, "rule calyx").unwrap();
-    writeln!(
-        emitter.out,
-        "  command = $calyx_exe -l $calyx_base -b verilog $in -o $out"
-    )
-    .unwrap();
-}
-
-fn calyx_build(emitter: &mut Emitter, input: &Path, output: &Path) {
-    writeln!(
-        emitter.out,
-        "build {}: calyx {}",
-        output.to_string_lossy(),
-        input.to_string_lossy(),
-    )
-    .unwrap();
-}
 
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
@@ -40,12 +12,15 @@ fn build_driver() -> Driver {
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv"]);
 
-    bld.op(
+    bld.rule(
         "compile Calyx to Verilog",
         calyx,
         verilog,
-        calyx_rules,
-        calyx_build,
+        "calyx",
+        "calyx_base = /Users/asampson/cu/research/calyx
+calyx_exe = $calyx_base/target/debug/calyx
+rule calyx
+  command = $calyx_exe -l $calyx_base -b verilog $in -o $out",
     );
     bld.op(
         "compile Calyx internally",
