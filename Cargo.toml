@@ -8,3 +8,4 @@ argh = "0.1.10"
 cranelift-entity = "0.96.2"
 serde = { version = "1.0", features = ["derive"] }
 figment = { version = "0.10.12", features = ["toml"] }
+anyhow = "1.0"

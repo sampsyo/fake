@@ -1,11 +1,10 @@
 use crate::{Driver, Emitter, Request, State};
+use anyhow::{anyhow, Context};
 use argh::FromArgs;
-use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::result::Result;
 use std::str::FromStr;
 
 enum Mode {
@@ -73,28 +72,30 @@ struct FakeArgs {
     keep: bool,
 }
 
-fn from_state(driver: &Driver, args: &FakeArgs) -> Result<State, &'static str> {
+fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<State> {
     match &args.from {
-        Some(name) => driver.get_state(name).ok_or("unknown --from state"),
+        Some(name) => driver
+            .get_state(name)
+            .ok_or(anyhow!("unknown --from state")),
         None => driver
             .guess_state(&args.input)
-            .ok_or("could not infer input state"),
+            .ok_or(anyhow!("could not infer input state")),
     }
 }
 
-fn to_state(driver: &Driver, args: &FakeArgs) -> Result<State, &'static str> {
+fn to_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<State> {
     match &args.to {
-        Some(name) => driver.get_state(name).ok_or("unknown --to state"),
+        Some(name) => driver.get_state(name).ok_or(anyhow!("unknown --to state")),
         None => match &args.output {
             Some(out) => driver
                 .guess_state(out)
-                .ok_or("could not infer output state"),
-            None => Err("specify an output file or use --to"),
+                .ok_or(anyhow!("could not infer output state")),
+            None => Err(anyhow!("specify an output file or use --to")),
         },
     }
 }
 
-fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> Result<Request, &'static str> {
+fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> anyhow::Result<Request> {
     let in_path = relative_path(&args.input, workdir);
     let out_path = args.output.as_ref().map(|p| relative_path(p, workdir));
 
@@ -136,7 +137,7 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
     }
 }
 
-fn cli_inner(driver: &Driver) -> Result<(), Box<dyn Error>> {
+fn cli_inner(driver: &Driver) -> anyhow::Result<()> {
     let args: FakeArgs = argh::from_env();
 
     // The default working directory (if not specified) depends on the mode.
@@ -151,7 +152,7 @@ fn cli_inner(driver: &Driver) -> Result<(), Box<dyn Error>> {
     let cfg = crate::config::Config::new().unwrap(); // TODO handle error
 
     let req = get_request(driver, &args, &workdir)?;
-    let plan = driver.plan(req).ok_or("could not find path")?;
+    let plan = driver.plan(req).ok_or(anyhow!("could not find path"))?;
 
     match args.mode {
         Mode::ShowPlan => {
@@ -174,7 +175,8 @@ fn cli_inner(driver: &Driver) -> Result<(), Box<dyn Error>> {
             // Run `ninja` in the working directory.
             Command::new(cfg.global.ninja)
                 .current_dir(&workdir)
-                .status()?;
+                .status()
+                .context("ninja execution failed")?;
 
             // TODO consider printing final result to stdout, if it wasn't mapped to a file?
             // and also accepting input on stdin...
