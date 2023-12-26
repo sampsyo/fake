@@ -1,9 +1,5 @@
 use fake::{cli, Driver, DriverBuilder, RuleBuilder};
 
-// TODO: Rethink the modularity of operators... maybe they should be traits instead of objects??
-// Things they need to encapsulate include configuration options (which could, importantly, be
-// shared between multiple operators) and setup/rule code (similarly shared?).
-
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
 
