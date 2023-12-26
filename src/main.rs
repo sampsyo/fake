@@ -10,38 +10,59 @@ fn build_driver() -> Driver {
     let dahlia = bld.state("dahlia", &["fuse"]);
     let mrxl = bld.state("mrxl", &["mrxl"]);
     let calyx = bld.state("calyx", &["futil"]);
-    let verilog = bld.state("verilog", &["sv"]);
+    let verilog = bld.state("verilog", &["sv", "v"]);
 
     let calyx_setup = bld.setup_stanza(
         "calyx_base = /Users/asampson/cu/research/calyx
 calyx_exe = $calyx_base/target/debug/calyx
-rule calyx
-  command = $calyx_exe -l $calyx_base -b verilog $in -o $out",
+rule calyx-to-verilog
+  command = $calyx_exe -l $calyx_base -b verilog $in -o $out
+rule calyx-to-calyx
+  command = $calyx_exe -l $calyx_base $in -o $out",
     );
+    // TODO: the two backends could also be selected with a Ninja variable...
 
     bld.rule(
         "compile Calyx to Verilog",
         Some(calyx_setup),
         calyx,
         verilog,
-        "calyx",
+        "calyx-to-verilog",
     );
-    bld.op(
+    bld.rule(
         "compile Calyx internally",
-        None,
+        Some(calyx_setup),
         calyx,
         calyx,
-        |_, _, _| unimplemented!(),
+        "calyx-to-calyx",
     );
-    bld.op("compile Dahlia", None, dahlia, calyx, |_, _, _| {
-        println!("run fuse");
-    });
-    bld.op(
-        "compile MrXL",
-        None,
+
+    let dahlia_setup = bld.setup_stanza(
+        "dahlia_exec = /Users/asampson/cu/research/dahlia/fuse
+rule dahlia-to-calyx
+  command = $dahlia_exec -b calyx --lower -l error $in -o $out",
+    );
+
+    bld.rule(
+        "compile Dahlia to Calyx",
+        Some(dahlia_setup),
+        dahlia,
+        calyx,
+        "dahlia-to-calyx",
+    );
+
+    let mrxl_setup = bld.setup_stanza(
+        "mrxl_exec = mrxl
+rule mrxl-to-calyx
+  command = $mrxl_exec $in > $out",
+    );
+
+    bld.rule(
+        "compile MrXL to Calyx",
+        Some(mrxl_setup),
         mrxl,
         calyx,
-        |_, _, _| unimplemented!(),
+        "mrxl-to-calyx",
     );
 
     bld.build()
