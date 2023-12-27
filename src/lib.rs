@@ -29,7 +29,7 @@ impl State {
 /// A generated Ninja setup stanza.
 /// TODO: Should these have, like, names and stuff?
 pub trait Setup {
-    fn setup(&self, emitter: &mut Emitter, run: &Run) -> ();
+    fn setup(&self, emitter: &mut Emitter, run: &Run);
 }
 
 /// A reference to a setup.
@@ -40,7 +40,7 @@ entity_impl!(SetupRef, "setup");
 type EmitSetup = fn(&mut Emitter, &Run) -> ();
 
 impl Setup for EmitSetup {
-    fn setup(&self, emitter: &mut Emitter, run: &Run) -> () {
+    fn setup(&self, emitter: &mut Emitter, run: &Run) {
         self(emitter, run)
     }
 }
@@ -55,13 +55,13 @@ struct OpMeta {
 
 /// The actual Ninja-generating machinery for an operation.
 trait OpImpl {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> ();
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path);
 }
 
 type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
 
 impl OpImpl for EmitBuild {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) {
         (self)(emitter, input, output)
     }
 }
@@ -80,7 +80,7 @@ pub struct RuleOp {
 }
 
 impl OpImpl for RuleOp {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> () {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) {
         emitter.build(&self.rule_name, input, output);
     }
 }
@@ -340,17 +340,17 @@ impl<'a> Run<'a> {
         let ninja = self.config.global.ninja.clone();
 
         let stale_dir = dir.exists();
-        self.emit_to_dir(&dir)?;
+        self.emit_to_dir(dir)?;
 
         // Run `ninja` in the working directory.
-        Command::new(ninja).current_dir(&dir).status()?;
+        Command::new(ninja).current_dir(dir).status()?;
 
         // TODO consider printing final result to stdout, if it wasn't mapped to a file?
         // and also accepting input on stdin...
 
         // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
         if !keep && !stale_dir {
-            std::fs::remove_dir_all(&dir)?;
+            std::fs::remove_dir_all(dir)?;
         }
 
         Ok(())
@@ -391,7 +391,8 @@ impl Emitter {
         // Mark the last file as the default target.
         writeln!(self.out)?;
         write!(self.out, "default ")?;
-        self.out.write(last_file.as_os_str().as_encoded_bytes())?;
+        self.out
+            .write_all(last_file.as_os_str().as_encoded_bytes())?;
         writeln!(self.out)?;
 
         Ok(())
@@ -407,14 +408,14 @@ impl Emitter {
     }
 
     pub fn build(&mut self, rule: &str, input: &Path, output: &Path) {
-        self.out.write(b"build ").unwrap();
+        self.out.write_all(b"build ").unwrap();
         self.out
-            .write(output.as_os_str().as_encoded_bytes())
+            .write_all(output.as_os_str().as_encoded_bytes())
             .unwrap();
         write!(self.out, ": {} ", rule).unwrap();
         self.out
-            .write(input.as_os_str().as_encoded_bytes())
+            .write_all(input.as_os_str().as_encoded_bytes())
             .unwrap();
-        self.out.write(b"\n").unwrap();
+        self.out.write_all(b"\n").unwrap();
     }
 }
