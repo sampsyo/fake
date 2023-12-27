@@ -91,7 +91,6 @@ pub struct OpRef(u32);
 entity_impl!(OpRef, "operation");
 
 pub struct Driver {
-    pub config: config::Config,
     pub setups: PrimaryMap<SetupRef, Box<dyn Setup>>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
@@ -269,7 +268,6 @@ impl DriverBuilder {
 
     pub fn build(self) -> Driver {
         Driver {
-            config: config::Config::new().expect("failed to load config"),
             setups: self.setups,
             states: self.states,
             ops: self.ops,
@@ -289,6 +287,74 @@ pub struct Request {
 pub struct Plan {
     pub start: PathBuf,
     pub steps: Vec<(OpRef, PathBuf)>,
+}
+
+pub struct Run<'a> {
+    pub driver: &'a Driver,
+    pub plan: Plan,
+    pub config: config::Config,
+}
+
+impl<'a> Run<'a> {
+    pub fn new(driver: &'a Driver, plan: Plan) -> Self {
+        Self {
+            driver,
+            plan,
+            config: config::Config::new().expect("failed to load config"),
+        }
+    }
+
+    /// Just print the plan for debugging purposes.
+    pub fn show(self) {
+        println!("start: {}", self.plan.start.display());
+        for (op, file) in &self.plan.steps {
+            println!(
+                "{}: {} -> {}",
+                op,
+                self.driver.ops[*op].meta.name,
+                file.display()
+            );
+        }
+    }
+
+    /// Print the `build.ninja` file to stdout.
+    pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
+        let mut emitter = Emitter::new(Box::new(std::io::stdout()));
+        emitter.emit(&self.driver, self.plan)
+    }
+
+    /// Ensure that a directory exists and write `build.ninja` inside it.
+    pub fn emit_to_dir(self, dir: &Path) -> Result<(), std::io::Error> {
+        std::fs::create_dir_all(dir)?;
+        let ninja_path = dir.join("build.ninja");
+        let ninja_file = std::fs::File::create(ninja_path)?;
+
+        let mut emitter = Emitter::new(Box::new(ninja_file));
+        emitter.emit(&self.driver, self.plan)
+    }
+
+    /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
+    pub fn emit_and_run(self, dir: &Path) -> Result<(), std::io::Error> {
+        // TODO: This workaround for lifetime stuff in the config isn't great.
+        let keep = self.config.global.keep_build_dir;
+        let ninja = self.config.global.ninja.clone();
+
+        let stale_dir = dir.exists();
+        self.emit_to_dir(&dir)?;
+
+        // Run `ninja` in the working directory.
+        Command::new(ninja).current_dir(&dir).status()?;
+
+        // TODO consider printing final result to stdout, if it wasn't mapped to a file?
+        // and also accepting input on stdin...
+
+        // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
+        if !keep && !stale_dir {
+            std::fs::remove_dir_all(&dir)?;
+        }
+
+        Ok(())
+    }
 }
 
 pub struct Emitter {
@@ -327,43 +393,6 @@ impl Emitter {
         write!(self.out, "default ")?;
         self.out.write(last_file.as_os_str().as_encoded_bytes())?;
         writeln!(self.out)?;
-
-        Ok(())
-    }
-
-    /// Print the `build.ninja` file to stdout.
-    pub fn emit_to_stdout(driver: &Driver, plan: Plan) -> Result<(), std::io::Error> {
-        let mut emitter = Self::new(Box::new(std::io::stdout()));
-        emitter.emit(driver, plan)
-    }
-
-    /// Ensure that a directory exists and write `build.ninja` inside it.
-    pub fn emit_to_dir(driver: &Driver, plan: Plan, dir: &Path) -> Result<(), std::io::Error> {
-        std::fs::create_dir_all(dir)?;
-        let ninja_path = dir.join("build.ninja");
-        let ninja_file = std::fs::File::create(ninja_path)?;
-
-        let mut emitter = Self::new(Box::new(ninja_file));
-        emitter.emit(driver, plan)
-    }
-
-    /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
-    pub fn emit_and_run(driver: &Driver, plan: Plan, dir: &Path) -> Result<(), std::io::Error> {
-        let stale_dir = dir.exists();
-        Emitter::emit_to_dir(driver, plan, &dir)?;
-
-        // Run `ninja` in the working directory.
-        Command::new(&driver.config.global.ninja)
-            .current_dir(&dir)
-            .status()?;
-
-        // TODO consider printing final result to stdout, if it wasn't mapped to a file?
-        // and also accepting input on stdin...
-
-        // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
-        if !driver.config.global.keep_build_dir && !stale_dir {
-            std::fs::remove_dir_all(&dir)?;
-        }
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use crate::{Driver, Emitter, Request, StateRef};
+use crate::{Driver, Request, Run, StateRef};
 use anyhow::anyhow;
 use argh::FromArgs;
 use std::fmt::Display;
@@ -150,28 +150,21 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
 
     let req = get_request(driver, &args, &workdir)?;
     let plan = driver.plan(req).ok_or(anyhow!("could not find path"))?;
+    let run = Run::new(driver, plan);
 
     match args.mode {
         Mode::ShowPlan => {
-            println!("start: {}", plan.start.display());
-            for (op, file) in &plan.steps {
-                println!(
-                    "{}: {} -> {}",
-                    op,
-                    driver.ops[*op].meta.name,
-                    file.display()
-                );
-            }
+            run.show();
         }
         Mode::EmitNinja => {
-            Emitter::emit_to_stdout(driver, plan)?;
+            run.emit_to_stdout()?;
         }
         Mode::Generate => {
-            Emitter::emit_to_dir(driver, plan, &workdir)?;
+            run.emit_to_dir(&workdir)?;
         }
         Mode::Run => {
             // The `run` mode is similar to `fake --mode gen && ninja -C .fake`.
-            Emitter::emit_and_run(driver, plan, &workdir)?;
+            run.emit_and_run(&workdir)?;
         }
     }
 
