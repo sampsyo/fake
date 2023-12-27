@@ -320,7 +320,7 @@ impl<'a> Run<'a> {
     /// Print the `build.ninja` file to stdout.
     pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
         let mut emitter = Emitter::new(Box::new(std::io::stdout()));
-        emitter.emit(&self.driver, self.plan)
+        emitter.emit(self)
     }
 
     /// Ensure that a directory exists and write `build.ninja` inside it.
@@ -330,7 +330,7 @@ impl<'a> Run<'a> {
         let ninja_file = std::fs::File::create(ninja_path)?;
 
         let mut emitter = Emitter::new(Box::new(ninja_file));
-        emitter.emit(&self.driver, self.plan)
+        emitter.emit(self)
     }
 
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
@@ -366,14 +366,14 @@ impl Emitter {
         Self { out }
     }
 
-    pub fn emit(&mut self, driver: &Driver, plan: Plan) -> Result<(), std::io::Error> {
+    pub fn emit(&mut self, run: Run) -> Result<(), std::io::Error> {
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
-        for (op, _) in &plan.steps {
-            if let Some(setup) = driver.ops[*op].meta.setup {
+        for (op, _) in &run.plan.steps {
+            if let Some(setup) = run.driver.ops[*op].meta.setup {
                 if done_setups.insert(setup) {
                     writeln!(self.out, "# {}", setup).unwrap(); // TODO more descriptive name
-                    driver.setups[setup].setup(self);
+                    run.driver.setups[setup].setup(self);
                     writeln!(self.out)?;
                 }
             }
@@ -381,9 +381,9 @@ impl Emitter {
 
         // Emit the build commands for each step in the plan.
         writeln!(self.out, "# build targets")?;
-        let mut last_file = plan.start;
-        for (op, out_file) in plan.steps {
-            let op = &driver.ops[op];
+        let mut last_file = run.plan.start;
+        for (op, out_file) in run.plan.steps {
+            let op = &run.driver.ops[op];
             op.impl_.build(self, &last_file, &out_file);
             last_file = out_file;
         }
