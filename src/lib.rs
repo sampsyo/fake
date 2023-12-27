@@ -29,7 +29,7 @@ impl State {
 /// A generated Ninja setup stanza.
 /// TODO: Should these have, like, names and stuff?
 pub trait Setup {
-    fn setup(&self, emitter: &mut Emitter) -> ();
+    fn setup(&self, emitter: &mut Emitter, run: &Run) -> ();
 }
 
 /// A reference to a setup.
@@ -37,11 +37,11 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
-type EmitSetup = fn(&mut Emitter) -> ();
+type EmitSetup = fn(&mut Emitter, &Run) -> ();
 
 impl Setup for EmitSetup {
-    fn setup(&self, emitter: &mut Emitter) -> () {
-        self(emitter)
+    fn setup(&self, emitter: &mut Emitter, run: &Run) -> () {
+        self(emitter, run)
     }
 }
 
@@ -366,14 +366,14 @@ impl Emitter {
         Self { out }
     }
 
-    pub fn emit(&mut self, run: Run) -> Result<(), std::io::Error> {
+    fn emit(&mut self, run: Run) -> Result<(), std::io::Error> {
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
         for (op, _) in &run.plan.steps {
             if let Some(setup) = run.driver.ops[*op].meta.setup {
                 if done_setups.insert(setup) {
                     writeln!(self.out, "# {}", setup).unwrap(); // TODO more descriptive name
-                    run.driver.setups[setup].setup(self);
+                    run.driver.setups[setup].setup(self, &run);
                     writeln!(self.out)?;
                 }
             }
