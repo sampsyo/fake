@@ -148,9 +148,6 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
         })
     });
 
-    // Load configuration.
-    let cfg = crate::config::Config::new().unwrap(); // TODO handle error
-
     let req = get_request(driver, &args, &workdir)?;
     let plan = driver.plan(req).ok_or(anyhow!("could not find path"))?;
 
@@ -178,7 +175,7 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
             Emitter::emit_to_dir(driver, plan, &workdir)?;
 
             // Run `ninja` in the working directory.
-            Command::new(cfg.global.ninja)
+            Command::new(&driver.config.global.ninja)
                 .current_dir(&workdir)
                 .status()
                 .context("ninja execution failed")?;

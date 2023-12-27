@@ -90,6 +90,7 @@ pub struct OpRef(u32);
 entity_impl!(OpRef, "operation");
 
 pub struct Driver {
+    pub config: config::Config,
     pub setups: PrimaryMap<SetupRef, Box<dyn Setup>>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
@@ -267,6 +268,7 @@ impl DriverBuilder {
 
     pub fn build(self) -> Driver {
         Driver {
+            config: config::Config::new().expect("failed to load config"),
             setups: self.setups,
             states: self.states,
             ops: self.ops,
