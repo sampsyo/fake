@@ -319,7 +319,7 @@ impl<'a> Run<'a> {
 
     /// Print the `build.ninja` file to stdout.
     pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
-        let mut emitter = Emitter::new(Box::new(std::io::stdout()));
+        let emitter = Emitter::new(Box::new(std::io::stdout()));
         emitter.emit(self)
     }
 
@@ -329,7 +329,7 @@ impl<'a> Run<'a> {
         let ninja_path = dir.join("build.ninja");
         let ninja_file = std::fs::File::create(ninja_path)?;
 
-        let mut emitter = Emitter::new(Box::new(ninja_file));
+        let emitter = Emitter::new(Box::new(ninja_file));
         emitter.emit(self)
     }
 
@@ -362,18 +362,18 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    pub fn new(out: Box<dyn Write>) -> Self {
+    fn new(out: Box<dyn Write>) -> Self {
         Self { out }
     }
 
-    fn emit(&mut self, run: Run) -> Result<(), std::io::Error> {
+    fn emit(mut self, run: Run) -> Result<(), std::io::Error> {
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
         for (op, _) in &run.plan.steps {
             if let Some(setup) = run.driver.ops[*op].meta.setup {
                 if done_setups.insert(setup) {
                     writeln!(self.out, "# {}", setup).unwrap(); // TODO more descriptive name
-                    run.driver.setups[setup].setup(self, &run);
+                    run.driver.setups[setup].setup(&mut self, &run);
                     writeln!(self.out)?;
                 }
             }
@@ -384,7 +384,7 @@ impl Emitter {
         let mut last_file = run.plan.start;
         for (op, out_file) in run.plan.steps {
             let op = &run.driver.ops[op];
-            op.impl_.build(self, &last_file, &out_file);
+            op.impl_.build(&mut self, &last_file, &out_file);
             last_file = out_file;
         }
 
