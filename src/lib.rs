@@ -29,7 +29,7 @@ impl State {
 /// A generated Ninja setup stanza.
 /// TODO: Should these have, like, names and stuff?
 pub trait Setup {
-    fn setup(&self, emitter: &mut Emitter, run: &Run);
+    fn setup(&self, emitter: &mut Emitter);
 }
 
 /// A reference to a setup.
@@ -37,11 +37,11 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
-type EmitSetup = fn(&mut Emitter, &Run) -> ();
+type EmitSetup = fn(&mut Emitter) -> ();
 
 impl Setup for EmitSetup {
-    fn setup(&self, emitter: &mut Emitter, run: &Run) {
-        self(emitter, run)
+    fn setup(&self, emitter: &mut Emitter) {
+        self(emitter)
     }
 }
 
@@ -355,7 +355,7 @@ impl<'a> Run<'a> {
     }
 
     fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
-        let mut emitter = Emitter::new(out);
+        let mut emitter = Emitter::new(out, self.config);
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
@@ -363,7 +363,7 @@ impl<'a> Run<'a> {
             if let Some(setup) = self.driver.ops[*op].meta.setup {
                 if done_setups.insert(setup) {
                     writeln!(emitter.out, "# {}", setup).unwrap(); // TODO more descriptive name
-                    self.driver.setups[setup].setup(&mut emitter, &self);
+                    self.driver.setups[setup].setup(&mut emitter);
                     writeln!(emitter.out)?;
                 }
             }
@@ -392,11 +392,15 @@ impl<'a> Run<'a> {
 
 pub struct Emitter {
     pub out: Box<dyn Write>,
+    pub config: config::Config,
 }
 
 impl Emitter {
-    fn new<T: Write + 'static>(out: T) -> Self {
-        Self { out: Box::new(out) }
+    fn new<T: Write + 'static>(out: T, config: config::Config) -> Self {
+        Self {
+            out: Box::new(out),
+            config,
+        }
     }
 
     pub fn var(&mut self, name: &str, value: &str) {
