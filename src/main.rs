@@ -1,11 +1,4 @@
 use fake::{cli, Driver, DriverBuilder};
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize)]
-struct CalyxConfig {
-    base: String,
-    exe: Option<String>,
-}
 
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
@@ -17,16 +10,11 @@ fn build_driver() -> Driver {
 
     // Calyx.
     let calyx_setup = bld.setup(|e| {
-        let config: CalyxConfig = e.config.extract_inner("calyx").unwrap();
+        let base = e.config_val("calyx.base");
+        let exe = e.config_or("calyx.exe", "$calyx_base/target/debug/calyx");
 
-        e.var("calyx_base", &config.base)?;
-        e.var(
-            "calyx_exe",
-            config
-                .exe
-                .as_deref()
-                .unwrap_or("$calyx_base/target/debug/calyx"),
-        )?;
+        e.var("calyx_base", &base)?;
+        e.var("calyx_exe", &exe)?;
         e.rule(
             "calyx-to-verilog",
             "$calyx_exe -l $calyx_base -b verilog $in -o $out",

@@ -403,17 +403,35 @@ impl Emitter {
         }
     }
 
+    /// Fetch a configuration value, or panic if it's missing.
+    pub fn config_val(&self, key: &str) -> String {
+        // TODO better error reporting here
+        self.config
+            .extract_inner::<String>(key)
+            .expect("missing config key")
+    }
+
+    /// Fetch a configuration value, using a default if it's missing.
+    pub fn config_or(&self, key: &str, default: &str) -> String {
+        self.config
+            .extract_inner::<String>(key)
+            .unwrap_or_else(|_| default.into())
+    }
+
+    /// Emit a Ninja variable declaration.
     pub fn var(&mut self, name: &str, value: &str) -> std::io::Result<()> {
         writeln!(self.out, "{} = {}", name, value)?;
         Ok(())
     }
 
+    /// Emit a Ninja rule definition.
     pub fn rule(&mut self, name: &str, command: &str) -> std::io::Result<()> {
         writeln!(self.out, "rule {}", name)?;
         writeln!(self.out, "  command = {}", command)?;
         Ok(())
     }
 
+    /// Emit a Ninja build command.
     pub fn build(&mut self, rule: &str, input: &Path, output: &Path) -> std::io::Result<()> {
         self.out.write_all(b"build ")?;
         self.out.write_all(output.as_os_str().as_encoded_bytes())?;
