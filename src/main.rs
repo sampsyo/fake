@@ -17,7 +17,7 @@ fn build_driver() -> Driver {
 
     // Calyx.
     let calyx_setup = bld.setup(|e| {
-        let config: CalyxConfig = e.config.data.extract_inner("calyx").unwrap();
+        let config: CalyxConfig = e.config.extract_inner("calyx").unwrap();
 
         e.var("calyx_base", &config.base)?;
         e.var(

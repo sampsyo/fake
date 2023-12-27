@@ -355,7 +355,7 @@ impl<'a> Run<'a> {
     }
 
     fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
-        let mut emitter = Emitter::new(out, self.config);
+        let mut emitter = Emitter::new(out, self.config.data);
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
@@ -392,11 +392,11 @@ impl<'a> Run<'a> {
 
 pub struct Emitter {
     pub out: Box<dyn Write>,
-    pub config: config::Config,
+    pub config: figment::Figment,
 }
 
 impl Emitter {
-    fn new<T: Write + 'static>(out: T, config: config::Config) -> Self {
+    fn new<T: Write + 'static>(out: T, config: figment::Figment) -> Self {
         Self {
             out: Box::new(out),
             config,
