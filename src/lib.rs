@@ -319,7 +319,7 @@ impl<'a> Run<'a> {
 
     /// Print the `build.ninja` file to stdout.
     pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
-        let emitter = Emitter::new(Box::new(std::io::stdout()));
+        let emitter = Emitter::new(std::io::stdout());
         emitter.emit(self)
     }
 
@@ -329,7 +329,7 @@ impl<'a> Run<'a> {
         let ninja_path = dir.join("build.ninja");
         let ninja_file = std::fs::File::create(ninja_path)?;
 
-        let emitter = Emitter::new(Box::new(ninja_file));
+        let emitter = Emitter::new(ninja_file);
         emitter.emit(self)
     }
 
@@ -362,8 +362,8 @@ pub struct Emitter {
 }
 
 impl Emitter {
-    fn new(out: Box<dyn Write>) -> Self {
-        Self { out }
+    fn new<T: Write + 'static>(out: T) -> Self {
+        Self { out: Box::new(out) }
     }
 
     fn emit(mut self, run: Run) -> Result<(), std::io::Error> {
