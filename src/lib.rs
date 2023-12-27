@@ -1,5 +1,5 @@
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -320,15 +320,47 @@ impl<'a> Run<'a> {
     /// Print a GraphViz representation of the plan.
     pub fn show_dot(self) {
         println!("digraph plan {{");
-        for (state_ref, state) in self.driver.states.iter() {
-            println!("  {} [label=\"{}\"];", state_ref, state.name);
+
+        // Record the states and ops that are actually used in the plan.
+        let mut states: HashMap<StateRef, String> = HashMap::new();
+        let mut ops: HashSet<OpRef> = HashSet::new();
+        let first_op = self.plan.steps[0].0;
+        states.insert(
+            self.driver.ops[first_op].meta.input,
+            self.plan.start.to_string_lossy().to_string(),
+        );
+        for (op, file) in &self.plan.steps {
+            states.insert(
+                self.driver.ops[*op].meta.output,
+                file.to_string_lossy().to_string(),
+            );
+            ops.insert(*op);
         }
-        for op in self.driver.ops.values() {
-            println!(
-                "  {} -> {} [label=\"{}\"];",
+
+        // Show all states.
+        for (state_ref, state) in self.driver.states.iter() {
+            print!("  {} [label=\"{}\"", state_ref, state.name);
+            if let Some(filename) = states.get(&state_ref) {
+                print!(
+                    " penwidth=3 fillcolor=gray style=filled xlabel=\"{}\"",
+                    filename
+                );
+            }
+            println!("];");
+        }
+
+        // Show all operations.
+        for (op_ref, op) in self.driver.ops.iter() {
+            print!(
+                "  {} -> {} [label=\"{}\"",
                 op.meta.input, op.meta.output, op.meta.name
             );
+            if ops.contains(&op_ref) {
+                print!(" penwidth=3");
+            }
+            println!("];");
         }
+
         println!("}}");
     }
 
