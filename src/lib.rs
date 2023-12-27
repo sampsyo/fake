@@ -319,8 +319,7 @@ impl<'a> Run<'a> {
 
     /// Print the `build.ninja` file to stdout.
     pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
-        let emitter = Emitter::new(std::io::stdout());
-        emitter.emit(self)
+        self.emit(std::io::stdout())
     }
 
     /// Ensure that a directory exists and write `build.ninja` inside it.
@@ -329,8 +328,7 @@ impl<'a> Run<'a> {
         let ninja_path = dir.join("build.ninja");
         let ninja_file = std::fs::File::create(ninja_path)?;
 
-        let emitter = Emitter::new(ninja_file);
-        emitter.emit(self)
+        self.emit(ninja_file)
     }
 
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
@@ -355,6 +353,41 @@ impl<'a> Run<'a> {
 
         Ok(())
     }
+
+    fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
+        let mut emitter = Emitter::new(out);
+
+        // Emit the setup for each operation used in the plan, only once.
+        let mut done_setups = HashSet::<SetupRef>::new();
+        for (op, _) in &self.plan.steps {
+            if let Some(setup) = self.driver.ops[*op].meta.setup {
+                if done_setups.insert(setup) {
+                    writeln!(emitter.out, "# {}", setup).unwrap(); // TODO more descriptive name
+                    self.driver.setups[setup].setup(&mut emitter, &self);
+                    writeln!(emitter.out)?;
+                }
+            }
+        }
+
+        // Emit the build commands for each step in the plan.
+        writeln!(emitter.out, "# build targets")?;
+        let mut last_file = self.plan.start;
+        for (op, out_file) in self.plan.steps {
+            let op = &self.driver.ops[op];
+            op.impl_.build(&mut emitter, &last_file, &out_file);
+            last_file = out_file;
+        }
+
+        // Mark the last file as the default target.
+        writeln!(emitter.out)?;
+        write!(emitter.out, "default ")?;
+        emitter
+            .out
+            .write_all(last_file.as_os_str().as_encoded_bytes())?;
+        writeln!(emitter.out)?;
+
+        Ok(())
+    }
 }
 
 pub struct Emitter {
@@ -364,38 +397,6 @@ pub struct Emitter {
 impl Emitter {
     fn new<T: Write + 'static>(out: T) -> Self {
         Self { out: Box::new(out) }
-    }
-
-    fn emit(mut self, run: Run) -> Result<(), std::io::Error> {
-        // Emit the setup for each operation used in the plan, only once.
-        let mut done_setups = HashSet::<SetupRef>::new();
-        for (op, _) in &run.plan.steps {
-            if let Some(setup) = run.driver.ops[*op].meta.setup {
-                if done_setups.insert(setup) {
-                    writeln!(self.out, "# {}", setup).unwrap(); // TODO more descriptive name
-                    run.driver.setups[setup].setup(&mut self, &run);
-                    writeln!(self.out)?;
-                }
-            }
-        }
-
-        // Emit the build commands for each step in the plan.
-        writeln!(self.out, "# build targets")?;
-        let mut last_file = run.plan.start;
-        for (op, out_file) in run.plan.steps {
-            let op = &run.driver.ops[op];
-            op.impl_.build(&mut self, &last_file, &out_file);
-            last_file = out_file;
-        }
-
-        // Mark the last file as the default target.
-        writeln!(self.out)?;
-        write!(self.out, "default ")?;
-        self.out
-            .write_all(last_file.as_os_str().as_encoded_bytes())?;
-        writeln!(self.out)?;
-
-        Ok(())
     }
 
     pub fn var(&mut self, name: &str, value: &str) {
