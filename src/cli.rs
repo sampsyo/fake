@@ -68,7 +68,7 @@ struct FakeArgs {
 
     /// in run mode, keep the temporary directory
     #[argh(switch)]
-    keep: bool,
+    keep: Option<bool>,
 }
 
 fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
@@ -138,7 +138,6 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
 
 pub fn cli(driver: &Driver) -> anyhow::Result<()> {
     let args: FakeArgs = argh::from_env();
-    // TODO: Wire up `--keep` to `driver.config.global.keep_build_dir`.
 
     // The default working directory (if not specified) depends on the mode.
     let workdir = args.dir.clone().unwrap_or_else(|| {
@@ -152,8 +151,13 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
     let req = get_request(driver, &args, &workdir)?;
     let plan = driver.plan(req).ok_or(anyhow!("could not find path"))?;
 
+    // Configure.
+    let mut run = Run::new(driver, plan);
+    if let Some(keep) = args.keep {
+        run.config.global.keep_build_dir = keep;
+    }
+
     // Execute.
-    let run = Run::new(driver, plan);
     match args.mode {
         Mode::ShowPlan => run.show(),
         Mode::EmitNinja => run.emit_to_stdout()?,
