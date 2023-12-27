@@ -10,17 +10,13 @@ fn build_driver() -> Driver {
 
     // Calyx.
     let calyx_setup = bld.setup(|e| {
-        let base = e.config_val("calyx.base");
-        let exe = e.config_or("calyx.exe", "$calyx_base/target/debug/calyx");
-
-        e.var("calyx_base", &base)?;
-        e.var("calyx_exe", &exe)?;
+        e.config_var("calyx_base", "calyx.base")?;
+        e.config_var_or("calyx_exe", "calyx.exe", "$calyx_base/target/debug/calyx")?;
         e.rule(
             "calyx-to-verilog",
             "$calyx_exe -l $calyx_base -b verilog $in -o $out",
         )?;
         e.rule("calyx-to-calyx", "$calyx_exe -l $calyx_base $in -o $out")?;
-
         Ok(())
     });
     bld.rule(Some(calyx_setup), calyx, verilog, "calyx-to-verilog");

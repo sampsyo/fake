@@ -418,6 +418,17 @@ impl Emitter {
             .unwrap_or_else(|_| default.into())
     }
 
+    /// Emit a Ninja variable declaration for `name` based on the configured value for `key`.
+    pub fn config_var(&mut self, name: &str, key: &str) -> std::io::Result<()> {
+        self.var(name, &self.config_val(key))
+    }
+
+    /// Emit a Ninja variable declaration for `name` based on the configured value for `key`, or a
+    /// default value if it's missing.
+    pub fn config_var_or(&mut self, name: &str, key: &str, default: &str) -> std::io::Result<()> {
+        self.var(name, &self.config_or(key, default))
+    }
+
     /// Emit a Ninja variable declaration.
     pub fn var(&mut self, name: &str, value: &str) -> std::io::Result<()> {
         writeln!(self.out, "{} = {}", name, value)?;
