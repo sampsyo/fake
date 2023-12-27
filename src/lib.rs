@@ -321,7 +321,9 @@ impl Emitter {
 
         // Mark the last file as the default target.
         writeln!(self.out)?;
-        writeln!(self.out, "default {}", last_file.display())?; // TODO pass through bytes, not `display`
+        write!(self.out, "default ")?;
+        self.out.write(last_file.as_os_str().as_encoded_bytes())?;
+        writeln!(self.out)?;
 
         Ok(())
     }
@@ -352,13 +354,14 @@ impl Emitter {
     }
 
     pub fn build(&mut self, rule: &str, input: &Path, output: &Path) {
-        writeln!(
-            self.out,
-            "build {}: {} {}",
-            output.to_string_lossy(), // TODO pass through actual bytes
-            rule,
-            input.to_string_lossy(), // likewise
-        )
-        .unwrap();
+        self.out.write(b"build ").unwrap();
+        self.out
+            .write(output.as_os_str().as_encoded_bytes())
+            .unwrap();
+        write!(self.out, ": {} ", rule).unwrap();
+        self.out
+            .write(input.as_os_str().as_encoded_bytes())
+            .unwrap();
+        self.out.write(b"\n").unwrap();
     }
 }
