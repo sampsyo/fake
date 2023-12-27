@@ -317,6 +317,21 @@ impl<'a> Run<'a> {
         }
     }
 
+    /// Print a GraphViz representation of the plan.
+    pub fn show_dot(self) {
+        println!("digraph plan {{");
+        for (state_ref, state) in self.driver.states.iter() {
+            println!("  {} [label=\"{}\"];", state_ref, state.name);
+        }
+        for op in self.driver.ops.values() {
+            println!(
+                "  {} -> {} [label=\"{}\"];",
+                op.meta.input, op.meta.output, op.meta.name
+            );
+        }
+        println!("}}");
+    }
+
     /// Print the `build.ninja` file to stdout.
     pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
         self.emit(std::io::stdout())

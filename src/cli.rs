@@ -9,6 +9,7 @@ use std::str::FromStr;
 enum Mode {
     EmitNinja,
     ShowPlan,
+    ShowDot,
     Generate,
     Run,
 }
@@ -22,6 +23,7 @@ impl FromStr for Mode {
             "plan" => Ok(Mode::ShowPlan),
             "gen" => Ok(Mode::Generate),
             "run" => Ok(Mode::Run),
+            "dot" => Ok(Mode::ShowDot),
             _ => Err("unknown mode".to_string()),
         }
     }
@@ -34,6 +36,7 @@ impl Display for Mode {
             Mode::ShowPlan => write!(f, "plan"),
             Mode::Generate => write!(f, "gen"),
             Mode::Run => write!(f, "run"),
+            Mode::ShowDot => write!(f, "dot"),
         }
     }
 }
@@ -160,6 +163,7 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
     // Execute.
     match args.mode {
         Mode::ShowPlan => run.show(),
+        Mode::ShowDot => run.show_dot(),
         Mode::EmitNinja => run.emit_to_stdout()?,
         Mode::Generate => run.emit_to_dir(&workdir)?,
         Mode::Run => run.emit_and_run(&workdir)?,
