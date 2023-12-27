@@ -1,10 +1,9 @@
 use crate::{Driver, Emitter, Request, StateRef};
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use argh::FromArgs;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 use std::str::FromStr;
 
 enum Mode {
@@ -139,6 +138,7 @@ fn relative_path(path: &Path, base: &Path) -> PathBuf {
 
 pub fn cli(driver: &Driver) -> anyhow::Result<()> {
     let args: FakeArgs = argh::from_env();
+    // TODO: Wire up `--keep` to `driver.config.global.keep_build_dir`.
 
     // The default working directory (if not specified) depends on the mode.
     let workdir = args.dir.clone().unwrap_or_else(|| {
@@ -171,22 +171,7 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
         }
         Mode::Run => {
             // The `run` mode is similar to `fake --mode gen && ninja -C .fake`.
-            let stale_workdir = workdir.exists();
-            Emitter::emit_to_dir(driver, plan, &workdir)?;
-
-            // Run `ninja` in the working directory.
-            Command::new(&driver.config.global.ninja)
-                .current_dir(&workdir)
-                .status()
-                .context("ninja execution failed")?;
-
-            // TODO consider printing final result to stdout, if it wasn't mapped to a file?
-            // and also accepting input on stdin...
-
-            // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
-            if !args.keep && !stale_workdir {
-                std::fs::remove_dir_all(&workdir)?
-            }
+            Emitter::emit_and_run(driver, plan, &workdir)?;
         }
     }
 

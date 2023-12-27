@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 pub mod cli;
 pub mod config;
@@ -344,6 +345,27 @@ impl Emitter {
 
         let mut emitter = Self::new(Box::new(ninja_file));
         emitter.emit(driver, plan)
+    }
+
+    /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
+    pub fn emit_and_run(driver: &Driver, plan: Plan, dir: &Path) -> Result<(), std::io::Error> {
+        let stale_dir = dir.exists();
+        Emitter::emit_to_dir(driver, plan, &dir)?;
+
+        // Run `ninja` in the working directory.
+        Command::new(&driver.config.global.ninja)
+            .current_dir(&dir)
+            .status()?;
+
+        // TODO consider printing final result to stdout, if it wasn't mapped to a file?
+        // and also accepting input on stdin...
+
+        // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
+        if !driver.config.global.keep_build_dir && !stale_dir {
+            std::fs::remove_dir_all(&dir)?;
+        }
+
+        Ok(())
     }
 
     pub fn var(&mut self, name: &str, value: &str) {
