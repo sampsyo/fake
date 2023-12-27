@@ -29,7 +29,7 @@ impl State {
 /// A generated Ninja setup stanza.
 /// TODO: Should these have, like, names and stuff?
 pub trait Setup {
-    fn setup(&self, emitter: &mut Emitter);
+    fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()>;
 }
 
 /// A reference to a setup.
@@ -37,10 +37,10 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
-type EmitSetup = fn(&mut Emitter) -> ();
+type EmitSetup = fn(&mut Emitter) -> std::io::Result<()>;
 
 impl Setup for EmitSetup {
-    fn setup(&self, emitter: &mut Emitter) {
+    fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()> {
         self(emitter)
     }
 }
@@ -55,13 +55,13 @@ struct OpMeta {
 
 /// The actual Ninja-generating machinery for an operation.
 trait OpImpl {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path);
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()>;
 }
 
-type EmitBuild = fn(&mut Emitter, &Path, &Path) -> ();
+type EmitBuild = fn(&mut Emitter, &Path, &Path) -> std::io::Result<()>;
 
 impl OpImpl for EmitBuild {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
         (self)(emitter, input, output)
     }
 }
@@ -80,8 +80,8 @@ pub struct RuleOp {
 }
 
 impl OpImpl for RuleOp {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) {
-        emitter.build(&self.rule_name, input, output);
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
+        emitter.build(&self.rule_name, input, output)
     }
 }
 
@@ -362,8 +362,8 @@ impl<'a> Run<'a> {
         for (op, _) in &self.plan.steps {
             if let Some(setup) = self.driver.ops[*op].meta.setup {
                 if done_setups.insert(setup) {
-                    writeln!(emitter.out, "# {}", setup).unwrap(); // TODO more descriptive name
-                    self.driver.setups[setup].setup(&mut emitter);
+                    writeln!(emitter.out, "# {}", setup)?; // TODO more descriptive name
+                    self.driver.setups[setup].setup(&mut emitter)?;
                     writeln!(emitter.out)?;
                 }
             }
@@ -374,7 +374,7 @@ impl<'a> Run<'a> {
         let mut last_file = self.plan.start;
         for (op, out_file) in self.plan.steps {
             let op = &self.driver.ops[op];
-            op.impl_.build(&mut emitter, &last_file, &out_file);
+            op.impl_.build(&mut emitter, &last_file, &out_file)?;
             last_file = out_file;
         }
 
@@ -403,24 +403,23 @@ impl Emitter {
         }
     }
 
-    pub fn var(&mut self, name: &str, value: &str) {
-        writeln!(self.out, "{} = {}", name, value).unwrap();
+    pub fn var(&mut self, name: &str, value: &str) -> std::io::Result<()> {
+        writeln!(self.out, "{} = {}", name, value)?;
+        Ok(())
     }
 
-    pub fn rule(&mut self, name: &str, command: &str) {
-        writeln!(self.out, "rule {}", name).unwrap();
-        writeln!(self.out, "  command = {}", command).unwrap();
+    pub fn rule(&mut self, name: &str, command: &str) -> std::io::Result<()> {
+        writeln!(self.out, "rule {}", name)?;
+        writeln!(self.out, "  command = {}", command)?;
+        Ok(())
     }
 
-    pub fn build(&mut self, rule: &str, input: &Path, output: &Path) {
-        self.out.write_all(b"build ").unwrap();
-        self.out
-            .write_all(output.as_os_str().as_encoded_bytes())
-            .unwrap();
-        write!(self.out, ": {} ", rule).unwrap();
-        self.out
-            .write_all(input.as_os_str().as_encoded_bytes())
-            .unwrap();
-        self.out.write_all(b"\n").unwrap();
+    pub fn build(&mut self, rule: &str, input: &Path, output: &Path) -> std::io::Result<()> {
+        self.out.write_all(b"build ")?;
+        self.out.write_all(output.as_os_str().as_encoded_bytes())?;
+        write!(self.out, ": {} ", rule)?;
+        self.out.write_all(input.as_os_str().as_encoded_bytes())?;
+        self.out.write_all(b"\n")?;
+        Ok(())
     }
 }
