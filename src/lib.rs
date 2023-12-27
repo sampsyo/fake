@@ -320,6 +320,7 @@ impl<'a> Run<'a> {
     /// Print a GraphViz representation of the plan.
     pub fn show_dot(self) {
         println!("digraph plan {{");
+        println!("  node[shape=box];");
 
         // Record the states and ops that are actually used in the plan.
         let mut states: HashMap<StateRef, String> = HashMap::new();
@@ -339,12 +340,14 @@ impl<'a> Run<'a> {
 
         // Show all states.
         for (state_ref, state) in self.driver.states.iter() {
-            print!("  {} [label=\"{}\"", state_ref, state.name);
+            print!("  {} [", state_ref);
             if let Some(filename) = states.get(&state_ref) {
                 print!(
-                    " penwidth=3 fillcolor=gray style=filled xlabel=\"{}\"",
-                    filename
+                    "label=\"{}\n{}\" penwidth=3 fillcolor=gray style=filled",
+                    state.name, filename
                 );
+            } else {
+                print!("label=\"{}\"", state.name);
             }
             println!("];");
         }
