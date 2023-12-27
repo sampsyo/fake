@@ -148,24 +148,17 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
         })
     });
 
+    // Make a plan.
     let req = get_request(driver, &args, &workdir)?;
     let plan = driver.plan(req).ok_or(anyhow!("could not find path"))?;
-    let run = Run::new(driver, plan);
 
+    // Execute.
+    let run = Run::new(driver, plan);
     match args.mode {
-        Mode::ShowPlan => {
-            run.show();
-        }
-        Mode::EmitNinja => {
-            run.emit_to_stdout()?;
-        }
-        Mode::Generate => {
-            run.emit_to_dir(&workdir)?;
-        }
-        Mode::Run => {
-            // The `run` mode is similar to `fake --mode gen && ninja -C .fake`.
-            run.emit_and_run(&workdir)?;
-        }
+        Mode::ShowPlan => run.show(),
+        Mode::EmitNinja => run.emit_to_stdout()?,
+        Mode::Generate => run.emit_to_dir(&workdir)?,
+        Mode::Run => run.emit_and_run(&workdir)?,
     }
 
     Ok(())
