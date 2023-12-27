@@ -208,13 +208,13 @@ impl DriverBuilder {
         })
     }
 
-    fn add_op(
+    fn add_op<T: OpImpl + 'static>(
         &mut self,
         name: &str,
         setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
-        impl_: Box<dyn OpImpl>,
+        impl_: T,
     ) -> OpRef {
         let meta = OpMeta {
             name: name.to_string(),
@@ -222,7 +222,10 @@ impl DriverBuilder {
             input,
             output,
         };
-        self.ops.push(Operation { meta, impl_ })
+        self.ops.push(Operation {
+            meta,
+            impl_: Box::new(impl_),
+        })
     }
 
     pub fn add_setup<T: Setup + 'static>(&mut self, setup: T) -> SetupRef {
@@ -241,7 +244,7 @@ impl DriverBuilder {
         output: StateRef,
         build: EmitBuild,
     ) -> OpRef {
-        self.add_op(name, setup, input, output, Box::new(build))
+        self.add_op(name, setup, input, output, build)
     }
 
     pub fn rule(
@@ -256,9 +259,9 @@ impl DriverBuilder {
             setup,
             input,
             output,
-            Box::new(RuleOp {
+            RuleOp {
                 rule_name: rule_name.to_string(),
-            }),
+            },
         )
     }
 
