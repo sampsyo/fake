@@ -20,7 +20,13 @@ fn build_driver() -> Driver {
         let config: CalyxConfig = r.config.data.extract_inner("calyx").unwrap();
 
         e.var("calyx_base", &config.base);
-        e.var("calyx_exe", config.exe.as_deref().unwrap_or("$calyx_base/target/debug/calyx"));
+        e.var(
+            "calyx_exe",
+            config
+                .exe
+                .as_deref()
+                .unwrap_or("$calyx_base/target/debug/calyx"),
+        );
         e.rule(
             "calyx-to-verilog",
             "$calyx_exe -l $calyx_base -b verilog $in -o $out",
