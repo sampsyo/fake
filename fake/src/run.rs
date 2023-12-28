@@ -130,17 +130,6 @@ impl<'a> Run<'a> {
             }
         }
 
-        // Possibly capture the first input from stdin.
-        if self.plan.stdin {
-            emitter.comment("capture input from stdin")?;
-            emitter.rule("capture", "cat > $out")?;
-            write!(emitter.out, "build ")?;
-            emitter.filename(&self.plan.start)?;
-            writeln!(emitter.out, ": capture")?;
-            writeln!(emitter.out, "  pool = console")?;
-            writeln!(emitter.out)?;
-        }
-
         // Emit the build commands for each step in the plan.
         emitter.comment("build targets")?;
         let mut last_file = self.plan.start;
@@ -151,25 +140,10 @@ impl<'a> Run<'a> {
         }
         writeln!(emitter.out)?;
 
-        // Possibly emit the final output to stdout.
-        if self.plan.stdout {
-            emitter.comment("emit final output to stdout")?;
-            emitter.rule("show", "cat $in")?;
-            write!(emitter.out, "build _stdout: show ")?;
-            emitter.filename(&last_file)?;
-            writeln!(emitter.out)?;
-            writeln!(emitter.out, "  pool = console")?;
-            writeln!(emitter.out)?;
-        }
-
-        // Mark the last file (or stdout emission) as the default target.
-        if self.plan.stdout {
-            writeln!(emitter.out, "default _stdout")?;
-        } else {
-            write!(emitter.out, "default ")?;
-            emitter.filename(&last_file)?;
-            writeln!(emitter.out)?;
-        }
+        // Mark the last file as the default target.
+        write!(emitter.out, "default ")?;
+        emitter.filename(&last_file)?;
+        writeln!(emitter.out)?;
 
         Ok(())
     }

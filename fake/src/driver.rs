@@ -89,6 +89,8 @@ pub struct Driver {
     pub setups: PrimaryMap<SetupRef, Setup>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
+    stdin_op: OpRef,
+    stdout_op: OpRef,
 }
 
 impl Driver {
@@ -148,40 +150,40 @@ impl Driver {
         // Find a path through the states.
         let path = self.find_path(req.start_state, req.end_state)?;
 
+        let mut steps: Vec<(OpRef, PathBuf)> = vec![];
+
         // Get the initial input filename and the stem to use to generate all intermediate filenames.
-        let (stdin, start_file) = match req.start_file {
-            Some(path) => (false, path),
-            None => (
-                true,
-                self.gen_name(OsStr::new("stdin"), self.ops[path[0]].input),
-            ),
+        let start_file = match req.start_file {
+            Some(path) => path,
+            None => {
+                // Use the special "stdin" operator to capture the input file.
+                let filename = self.gen_name(OsStr::new("stdin"), self.ops[path[0]].input);
+                steps.push((self.stdin_op, filename.clone()));
+                filename
+            }
         };
         let stem = start_file.file_stem().unwrap();
 
         // Generate filenames for each step.
-        let mut steps: Vec<_> = path
-            .into_iter()
-            .map(|op| {
-                let filename = self.gen_name(stem, self.ops[op].output);
-                (op, filename)
-            })
-            .collect();
+        steps.extend(path.into_iter().map(|op| {
+            let filename = self.gen_name(stem, self.ops[op].output);
+            (op, filename)
+        }));
 
-        // If we have a specified output filename, use that instead of the generated one.
-        // TODO this is ugly
-        let stdout = if let Some(end_file) = req.end_file {
+        if let Some(end_file) = req.end_file {
+            // If we have a specified output filename, use that instead of the generated one.
             let last_step = steps.last_mut().expect("no steps");
-            last_step.1 = end_file;
+            last_step.1 = end_file; // TODO Can we just avoid generating the filename in the first place?
             false
         } else {
+            // Use the special "stdout" operator to show the output.
+            steps.push((self.stdout_op, PathBuf::from("_stdout")));
             true
         };
 
         Some(Plan {
             start: start_file,
             steps,
-            stdin,
-            stdout,
         })
     }
 
@@ -273,11 +275,44 @@ impl DriverBuilder {
         )
     }
 
-    pub fn build(self) -> Driver {
+    /// Add our built-in operations for capturing stdin and printing to stdout.
+    fn builtin_ops(&mut self) -> (OpRef, OpRef) {
+        let null_state = self.state("null", &[]);
+
+        let stdin_setup = self.setup("stdin", |e| {
+            e.rule("capture", "cat > $out")?;
+            Ok(())
+        });
+        let stdin = self.op(
+            "stdin",
+            Some(stdin_setup),
+            null_state,
+            null_state,
+            |e, _, output| {
+                write!(e.out, "build ")?;
+                e.filename(output)?;
+                writeln!(e.out, ": capture")?;
+                Ok(())
+            },
+        );
+
+        let stdout_setup = self.setup("stdout", |e| {
+            e.rule("show", "cat $in")?;
+            Ok(())
+        });
+        let stdout = self.rule(Some(stdout_setup), null_state, null_state, "show");
+
+        (stdin, stdout)
+    }
+
+    pub fn build(mut self) -> Driver {
+        let (stdin_op, stdout_op) = self.builtin_ops();
         Driver {
             setups: self.setups,
             states: self.states,
             ops: self.ops,
+            stdin_op,
+            stdout_op,
         }
     }
 }
@@ -305,10 +340,4 @@ pub struct Plan {
 
     /// The chain of operations to run and each step's output file.
     pub steps: Vec<(OpRef, PathBuf)>,
-
-    /// Capture the first input from stdin.
-    pub stdin: bool,
-
-    /// Emit the last file to stdout.
-    pub stdout: bool,
 }
