@@ -28,6 +28,12 @@ pub struct Operation {
 pub struct OpRef(u32);
 entity_impl!(OpRef, "op");
 
+/// A Setup runs at configuration time and produces Ninja machinery for Operations.
+pub struct Setup {
+    pub name: String,
+    pub emit: Box<dyn EmitSetup>,
+}
+
 /// A reference to a Setup.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct SetupRef(u32);
@@ -81,7 +87,7 @@ impl EmitBuild for RuleOp {
 /// A Driver encapsulates a set of States and the Operations that can transform between them. It
 /// contains all the machinery to perform builds in a given ecosystem.
 pub struct Driver {
-    pub setups: PrimaryMap<SetupRef, Box<dyn EmitSetup>>,
+    pub setups: PrimaryMap<SetupRef, Setup>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
 }
@@ -186,7 +192,7 @@ impl Driver {
 
 #[derive(Default)]
 pub struct DriverBuilder {
-    setups: PrimaryMap<SetupRef, Box<dyn EmitSetup>>,
+    setups: PrimaryMap<SetupRef, Setup>,
     states: PrimaryMap<StateRef, State>,
     ops: PrimaryMap<OpRef, Operation>,
 }
@@ -216,12 +222,15 @@ impl DriverBuilder {
         })
     }
 
-    pub fn add_setup<T: EmitSetup + 'static>(&mut self, setup: T) -> SetupRef {
-        self.setups.push(Box::new(setup))
+    pub fn add_setup<T: EmitSetup + 'static>(&mut self, name: &str, emit: T) -> SetupRef {
+        self.setups.push(Setup {
+            name: name.into(),
+            emit: Box::new(emit),
+        })
     }
 
-    pub fn setup(&mut self, func: EmitSetupFn) -> SetupRef {
-        self.add_setup(func)
+    pub fn setup(&mut self, name: &str, func: EmitSetupFn) -> SetupRef {
+        self.add_setup(name, func)
     }
 
     pub fn op(

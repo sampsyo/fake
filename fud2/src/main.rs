@@ -9,7 +9,7 @@ fn build_driver() -> Driver {
     let verilog = bld.state("verilog", &["sv", "v"]);
 
     // Calyx.
-    let calyx_setup = bld.setup(|e| {
+    let calyx_setup = bld.setup("Calyx compiler", |e| {
         e.config_var("calyx_base", "calyx.base")?;
         e.config_var_or("calyx_exe", "calyx.exe", "$calyx_base/target/debug/calyx")?;
         e.rule(
@@ -23,7 +23,7 @@ fn build_driver() -> Driver {
     bld.rule(Some(calyx_setup), calyx, calyx, "calyx-to-calyx");
 
     // Dahlia.
-    let dahlia_setup = bld.setup(|e| {
+    let dahlia_setup = bld.setup("Dahlia compiler", |e| {
         e.var("dahlia_exec", "/Users/asampson/cu/research/dahlia/fuse")?;
         e.rule(
             "dahlia-to-calyx",
@@ -34,7 +34,7 @@ fn build_driver() -> Driver {
     bld.rule(Some(dahlia_setup), dahlia, calyx, "dahlia-to-calyx");
 
     // MrXL.
-    let mrxl_setup = bld.setup(|e| {
+    let mrxl_setup = bld.setup("MrXL compiler", |e| {
         e.var("mrxl_exec", "mrxl")?;
         e.rule("mrxl-to-calyx", "$mrxl_exec $in > $out")?;
         Ok(())

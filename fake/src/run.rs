@@ -125,8 +125,9 @@ impl<'a> Run<'a> {
         for (op, _) in &self.plan.steps {
             if let Some(setup) = self.driver.ops[*op].setup {
                 if done_setups.insert(setup) {
-                    writeln!(emitter.out, "# {}", setup)?; // TODO more descriptive name
-                    self.driver.setups[setup].setup(&mut emitter)?;
+                    let setup = &self.driver.setups[setup];
+                    writeln!(emitter.out, "# {}", setup.name)?; // TODO more descriptive name
+                    setup.emit.setup(&mut emitter)?;
                     writeln!(emitter.out)?;
                 }
             }
