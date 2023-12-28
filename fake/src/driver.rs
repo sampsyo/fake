@@ -23,7 +23,7 @@ impl State {
 
 /// A generated Ninja setup stanza.
 /// TODO: Should these have, like, names and stuff?
-pub trait Setup {
+pub trait EmitSetup {
     fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()>;
 }
 
@@ -32,9 +32,9 @@ pub trait Setup {
 pub struct SetupRef(u32);
 entity_impl!(SetupRef, "setup");
 
-type EmitSetup = fn(&mut Emitter) -> std::io::Result<()>;
+type EmitSetupFn = fn(&mut Emitter) -> std::io::Result<()>;
 
-impl Setup for EmitSetup {
+impl EmitSetup for EmitSetupFn {
     fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()> {
         self(emitter)
     }
@@ -49,13 +49,13 @@ pub(crate) struct OpMeta {
 }
 
 /// The actual Ninja-generating machinery for an operation.
-pub trait OpImpl {
+pub trait EmitBuild {
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()>;
 }
 
-type EmitBuild = fn(&mut Emitter, &Path, &Path) -> std::io::Result<()>;
+type EmitBuildFn = fn(&mut Emitter, &Path, &Path) -> std::io::Result<()>;
 
-impl OpImpl for EmitBuild {
+impl EmitBuild for EmitBuildFn {
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
         (self)(emitter, input, output)
     }
@@ -66,7 +66,7 @@ impl OpImpl for EmitBuild {
 /// require switching from `cranelift-entity` to `id-arena`?
 pub(crate) struct Operation {
     pub meta: OpMeta,
-    pub impl_: Box<dyn OpImpl>,
+    pub impl_: Box<dyn EmitBuild>,
 }
 
 /// An operation that works by applying a Ninja rule.
@@ -74,7 +74,7 @@ pub struct RuleOp {
     pub rule_name: String,
 }
 
-impl OpImpl for RuleOp {
+impl EmitBuild for RuleOp {
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
         emitter.build(&self.rule_name, input, output)
     }
@@ -83,10 +83,10 @@ impl OpImpl for RuleOp {
 /// A reference to an operation.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct OpRef(u32);
-entity_impl!(OpRef, "operation");
+entity_impl!(OpRef, "op");
 
 pub struct Driver {
-    pub setups: PrimaryMap<SetupRef, Box<dyn Setup>>,
+    pub setups: PrimaryMap<SetupRef, Box<dyn EmitSetup>>,
     pub states: PrimaryMap<StateRef, State>,
     pub(crate) ops: PrimaryMap<OpRef, Operation>,
 }
@@ -191,7 +191,7 @@ impl Driver {
 
 #[derive(Default)]
 pub struct DriverBuilder {
-    setups: PrimaryMap<SetupRef, Box<dyn Setup>>,
+    setups: PrimaryMap<SetupRef, Box<dyn EmitSetup>>,
     states: PrimaryMap<StateRef, State>,
     ops: PrimaryMap<OpRef, Operation>,
 }
@@ -204,7 +204,7 @@ impl DriverBuilder {
         })
     }
 
-    fn add_op<T: OpImpl + 'static>(
+    fn add_op<T: EmitBuild + 'static>(
         &mut self,
         name: &str,
         setup: Option<SetupRef>,
@@ -224,11 +224,11 @@ impl DriverBuilder {
         })
     }
 
-    pub fn add_setup<T: Setup + 'static>(&mut self, setup: T) -> SetupRef {
+    pub fn add_setup<T: EmitSetup + 'static>(&mut self, setup: T) -> SetupRef {
         self.setups.push(Box::new(setup))
     }
 
-    pub fn setup(&mut self, func: EmitSetup) -> SetupRef {
+    pub fn setup(&mut self, func: EmitSetupFn) -> SetupRef {
         self.add_setup(func)
     }
 
@@ -238,7 +238,7 @@ impl DriverBuilder {
         setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
-        build: EmitBuild,
+        build: EmitBuildFn,
     ) -> OpRef {
         self.add_op(name, setup, input, output, build)
     }
