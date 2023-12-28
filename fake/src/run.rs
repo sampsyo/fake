@@ -142,7 +142,7 @@ impl<'a> Run<'a> {
         }
 
         // Emit the build commands for each step in the plan.
-        writeln!(emitter.out, "# build targets")?;
+        emitter.comment("build targets")?;
         let mut last_file = self.plan.start;
         for (op, out_file) in self.plan.steps {
             let op = &self.driver.ops[op];
