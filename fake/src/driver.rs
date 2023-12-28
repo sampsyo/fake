@@ -3,16 +3,35 @@ use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-/// The details about a given state.
+/// A State is a type of file that Operations produce or consume.
 pub struct State {
     pub name: String,
     pub extensions: Vec<String>,
 }
 
-/// A reference to a state.
+/// A reference to a State.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct StateRef(u32);
 entity_impl!(StateRef, "state");
+
+/// An Operation transforms files from one State to another.
+pub struct Operation {
+    pub name: String,
+    pub input: StateRef,
+    pub output: StateRef,
+    pub setup: Option<SetupRef>,
+    pub emit: Box<dyn EmitBuild>,
+}
+
+/// A reference to an Operation.
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct OpRef(u32);
+entity_impl!(OpRef, "op");
+
+/// A reference to a Setup.
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct SetupRef(u32);
+entity_impl!(SetupRef, "setup");
 
 impl State {
     /// Check whether a filename extension indicates this state.
@@ -27,26 +46,12 @@ pub trait EmitSetup {
     fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()>;
 }
 
-/// A reference to a setup.
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct SetupRef(u32);
-entity_impl!(SetupRef, "setup");
-
 type EmitSetupFn = fn(&mut Emitter) -> std::io::Result<()>;
 
 impl EmitSetup for EmitSetupFn {
     fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()> {
         self(emitter)
     }
-}
-
-/// An Operation transforms files from one State to another.
-pub struct Operation {
-    pub name: String,
-    pub input: StateRef,
-    pub output: StateRef,
-    pub setup: Option<SetupRef>,
-    pub emit: Box<dyn EmitBuild>,
 }
 
 /// The actual Ninja-generating machinery for an operation.
@@ -73,11 +78,8 @@ impl EmitBuild for RuleOp {
     }
 }
 
-/// A reference to an operation.
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub struct OpRef(u32);
-entity_impl!(OpRef, "op");
-
+/// A Driver encapsulates a set of States and the Operations that can transform between them. It
+/// contains all the machinery to perform builds in a given ecosystem.
 pub struct Driver {
     pub setups: PrimaryMap<SetupRef, Box<dyn EmitSetup>>,
     pub states: PrimaryMap<StateRef, State>,
