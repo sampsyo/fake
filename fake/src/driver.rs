@@ -46,8 +46,31 @@ impl State {
     }
 }
 
-/// A generated Ninja setup stanza.
-/// TODO: Should these have, like, names and stuff?
+/// Code to emit a Ninja `build` command.
+pub trait EmitBuild {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()>;
+}
+
+type EmitBuildFn = fn(&mut Emitter, &Path, &Path) -> std::io::Result<()>;
+
+impl EmitBuild for EmitBuildFn {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
+        self(emitter, input, output)
+    }
+}
+
+/// A simple `build` emitter that just runs a Ninja rule.
+pub struct EmitRuleBuild {
+    pub rule_name: String,
+}
+
+impl EmitBuild for EmitRuleBuild {
+    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
+        emitter.build(&self.rule_name, input, output)
+    }
+}
+
+/// Code to emit Ninja code at the setup stage.
 pub trait EmitSetup {
     fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()>;
 }
@@ -57,30 +80,6 @@ type EmitSetupFn = fn(&mut Emitter) -> std::io::Result<()>;
 impl EmitSetup for EmitSetupFn {
     fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()> {
         self(emitter)
-    }
-}
-
-/// The actual Ninja-generating machinery for an operation.
-pub trait EmitBuild {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()>;
-}
-
-type EmitBuildFn = fn(&mut Emitter, &Path, &Path) -> std::io::Result<()>;
-
-impl EmitBuild for EmitBuildFn {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
-        (self)(emitter, input, output)
-    }
-}
-
-/// An operation that works by applying a Ninja rule.
-pub struct RuleOp {
-    pub rule_name: String,
-}
-
-impl EmitBuild for RuleOp {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
-        emitter.build(&self.rule_name, input, output)
     }
 }
 
@@ -256,7 +255,7 @@ impl DriverBuilder {
             setup,
             input,
             output,
-            RuleOp {
+            EmitRuleBuild {
                 rule_name: rule_name.to_string(),
             },
         )
