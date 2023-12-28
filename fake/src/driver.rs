@@ -40,12 +40,13 @@ impl EmitSetup for EmitSetupFn {
     }
 }
 
-/// Metadata about an operation that controls when it applies.
-pub(crate) struct OpMeta {
+/// An Operation transforms files from one State to another.
+pub struct Operation {
     pub name: String,
     pub input: StateRef,
     pub output: StateRef,
     pub setup: Option<SetupRef>,
+    pub emit: Box<dyn EmitBuild>,
 }
 
 /// The actual Ninja-generating machinery for an operation.
@@ -59,14 +60,6 @@ impl EmitBuild for EmitBuildFn {
     fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
         (self)(emitter, input, output)
     }
-}
-
-/// An Operation transforms files from one State to another.
-/// TODO: Someday, I would like to represent these as separate vectors (struct-of-arrays). This may
-/// require switching from `cranelift-entity` to `id-arena`?
-pub(crate) struct Operation {
-    pub meta: OpMeta,
-    pub impl_: Box<dyn EmitBuild>,
 }
 
 /// An operation that works by applying a Ninja rule.
@@ -88,7 +81,7 @@ entity_impl!(OpRef, "op");
 pub struct Driver {
     pub setups: PrimaryMap<SetupRef, Box<dyn EmitSetup>>,
     pub states: PrimaryMap<StateRef, State>,
-    pub(crate) ops: PrimaryMap<OpRef, Operation>,
+    pub ops: PrimaryMap<OpRef, Operation>,
 }
 
 impl Driver {
@@ -112,10 +105,10 @@ impl Driver {
 
             // Traverse any edge from the current state to an unvisited state.
             for (op_ref, op) in self.ops.iter() {
-                if op.meta.input == cur_state && !visited[op.meta.output] {
-                    state_queue.push(op.meta.output);
-                    visited[op.meta.output] = true;
-                    breadcrumbs[op.meta.output] = Some(op_ref);
+                if op.input == cur_state && !visited[op.output] {
+                    state_queue.push(op.output);
+                    visited[op.output] = true;
+                    breadcrumbs[op.output] = Some(op_ref);
                 }
             }
         }
@@ -127,7 +120,7 @@ impl Driver {
             match breadcrumbs[cur_state] {
                 Some(op) => {
                     op_path.push(op);
-                    cur_state = self.ops[op].meta.input;
+                    cur_state = self.ops[op].input;
                 }
                 None => return None,
             }
@@ -140,7 +133,7 @@ impl Driver {
     fn gen_name(&self, stem: &OsStr, op: OpRef) -> PathBuf {
         // Pick an appropriate extension for the output of this operation.
         let op = &self.ops[op];
-        let ext = &self.states[op.meta.output].extensions[0];
+        let ext = &self.states[op.output].extensions[0];
 
         // TODO avoid collisions in case we reuse extensions...
         PathBuf::from(stem).with_extension(ext)
@@ -210,17 +203,14 @@ impl DriverBuilder {
         setup: Option<SetupRef>,
         input: StateRef,
         output: StateRef,
-        impl_: T,
+        emit: T,
     ) -> OpRef {
-        let meta = OpMeta {
+        self.ops.push(Operation {
             name: name.to_string(),
             setup,
             input,
             output,
-        };
-        self.ops.push(Operation {
-            meta,
-            impl_: Box::new(impl_),
+            emit: Box::new(emit),
         })
     }
 

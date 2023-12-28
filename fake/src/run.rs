@@ -27,7 +27,7 @@ impl<'a> Run<'a> {
             println!(
                 "{}: {} -> {}",
                 op,
-                self.driver.ops[*op].meta.name,
+                self.driver.ops[*op].name,
                 file.display()
             );
         }
@@ -43,12 +43,12 @@ impl<'a> Run<'a> {
         let mut ops: HashSet<OpRef> = HashSet::new();
         let first_op = self.plan.steps[0].0;
         states.insert(
-            self.driver.ops[first_op].meta.input,
+            self.driver.ops[first_op].input,
             self.plan.start.to_string_lossy().to_string(),
         );
         for (op, file) in &self.plan.steps {
             states.insert(
-                self.driver.ops[*op].meta.output,
+                self.driver.ops[*op].output,
                 file.to_string_lossy().to_string(),
             );
             ops.insert(*op);
@@ -70,10 +70,7 @@ impl<'a> Run<'a> {
 
         // Show all operations.
         for (op_ref, op) in self.driver.ops.iter() {
-            print!(
-                "  {} -> {} [label=\"{}\"",
-                op.meta.input, op.meta.output, op.meta.name
-            );
+            print!("  {} -> {} [label=\"{}\"", op.input, op.output, op.name);
             if ops.contains(&op_ref) {
                 print!(" penwidth=3");
             }
@@ -126,7 +123,7 @@ impl<'a> Run<'a> {
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
         for (op, _) in &self.plan.steps {
-            if let Some(setup) = self.driver.ops[*op].meta.setup {
+            if let Some(setup) = self.driver.ops[*op].setup {
                 if done_setups.insert(setup) {
                     writeln!(emitter.out, "# {}", setup)?; // TODO more descriptive name
                     self.driver.setups[setup].setup(&mut emitter)?;
@@ -140,7 +137,7 @@ impl<'a> Run<'a> {
         let mut last_file = self.plan.start;
         for (op, out_file) in self.plan.steps {
             let op = &self.driver.ops[op];
-            op.impl_.build(&mut emitter, &last_file, &out_file)?;
+            op.emit.build(&mut emitter, &last_file, &out_file)?;
             last_file = out_file;
         }
 
