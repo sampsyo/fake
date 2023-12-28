@@ -106,9 +106,6 @@ impl<'a> Run<'a> {
         // Run `ninja` in the working directory.
         Command::new(ninja).current_dir(dir).status()?;
 
-        // TODO consider printing final result to stdout, if it wasn't mapped to a file?
-        // and also accepting input on stdin...
-
         // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
         if !keep && !stale_dir {
             std::fs::remove_dir_all(dir)?;
@@ -141,13 +138,30 @@ impl<'a> Run<'a> {
             op.emit.build(&mut emitter, &last_file, &out_file)?;
             last_file = out_file;
         }
-
-        // Mark the last file as the default target.
         writeln!(emitter.out)?;
+
+        // Possibly emit the final output to stdout.
+        if self.plan.stdout {
+            writeln!(emitter.out, "# emit final output to stdout")?;
+            emitter.rule("show", "cat $in")?;
+            write!(emitter.out, "build _stdout: show ")?;
+            emitter
+                .out
+                .write_all(last_file.as_os_str().as_encoded_bytes())?;
+            writeln!(emitter.out)?;
+            writeln!(emitter.out, "  pool = console")?;
+            writeln!(emitter.out)?;
+        }
+
+        // Mark the last file (or stdout emission) as the default target.
         write!(emitter.out, "default ")?;
-        emitter
-            .out
-            .write_all(last_file.as_os_str().as_encoded_bytes())?;
+        if self.plan.stdout {
+            write!(emitter.out, "_stdout")?;
+        } else {
+            emitter
+                .out
+                .write_all(last_file.as_os_str().as_encoded_bytes())?;
+        }
         writeln!(emitter.out)?;
 
         Ok(())

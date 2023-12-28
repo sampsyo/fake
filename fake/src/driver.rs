@@ -162,14 +162,19 @@ impl Driver {
 
         // If we have a specified output filename, use that instead of the generated one.
         // TODO this is ugly
-        if let Some(end_file) = req.end_file {
+        let stdout = if let Some(end_file) = req.end_file {
             let last_step = steps.last_mut().expect("no steps");
             last_step.1 = end_file;
-        }
+            false
+        } else {
+            true
+        };
 
         Some(Plan {
             start: req.start_file,
             steps,
+            stdin: false,
+            stdout,
         })
     }
 
@@ -280,6 +285,15 @@ pub struct Request {
 
 #[derive(Debug)]
 pub struct Plan {
+    /// The input to the first step.
     pub start: PathBuf,
+
+    /// The chain of operations to run and each step's output file.
     pub steps: Vec<(OpRef, PathBuf)>,
+
+    /// Capture the first input from stdin.
+    pub stdin: bool,
+
+    /// Emit the last file to stdout.
+    pub stdout: bool,
 }
