@@ -142,27 +142,23 @@ impl<'a> Run<'a> {
 
         // Possibly emit the final output to stdout.
         if self.plan.stdout {
-            writeln!(emitter.out, "# emit final output to stdout")?;
+            emitter.comment("emit final output to stdout")?;
             emitter.rule("show", "cat $in")?;
             write!(emitter.out, "build _stdout: show ")?;
-            emitter
-                .out
-                .write_all(last_file.as_os_str().as_encoded_bytes())?;
+            emitter.filename(&last_file)?;
             writeln!(emitter.out)?;
             writeln!(emitter.out, "  pool = console")?;
             writeln!(emitter.out)?;
         }
 
         // Mark the last file (or stdout emission) as the default target.
-        write!(emitter.out, "default ")?;
         if self.plan.stdout {
-            write!(emitter.out, "_stdout")?;
+            writeln!(emitter.out, "default _stdout")?;
         } else {
-            emitter
-                .out
-                .write_all(last_file.as_os_str().as_encoded_bytes())?;
+            write!(emitter.out, "default ")?;
+            emitter.filename(&last_file)?;
+            writeln!(emitter.out)?;
         }
-        writeln!(emitter.out)?;
 
         Ok(())
     }
@@ -223,10 +219,23 @@ impl Emitter {
     /// Emit a Ninja build command.
     pub fn build(&mut self, rule: &str, input: &Path, output: &Path) -> std::io::Result<()> {
         self.out.write_all(b"build ")?;
-        self.out.write_all(output.as_os_str().as_encoded_bytes())?;
+        self.filename(output)?;
         write!(self.out, ": {} ", rule)?;
-        self.out.write_all(input.as_os_str().as_encoded_bytes())?;
+        self.filename(input)?;
         self.out.write_all(b"\n")?;
+        Ok(())
+    }
+
+    /// Emit a Ninja comment.
+    pub fn comment(&mut self, text: &str) -> std::io::Result<()> {
+        writeln!(self.out, "# {}", text)?;
+        Ok(())
+    }
+
+    /// Write a filename to the Ninja file.
+    pub fn filename(&mut self, path: &Path) -> std::io::Result<()> {
+        // This seems like the best/only way to portably preserve the raw filename??
+        self.out.write_all(path.as_os_str().as_encoded_bytes())?;
         Ok(())
     }
 }
