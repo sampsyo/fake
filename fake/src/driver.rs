@@ -89,8 +89,8 @@ pub struct Driver {
     pub setups: PrimaryMap<SetupRef, Setup>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
-    stdin_op: OpRef,
-    stdout_op: OpRef,
+    pub(crate) stdin_op: OpRef,
+    pub(crate) stdout_op: OpRef,
 }
 
 impl Driver {

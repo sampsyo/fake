@@ -23,13 +23,14 @@ impl<'a> Run<'a> {
     /// Just print the plan for debugging purposes.
     pub fn show(self) {
         println!("start: {}", self.plan.start.display());
-        for (op, file) in &self.plan.steps {
-            println!(
-                "{}: {} -> {}",
-                op,
-                self.driver.ops[*op].name,
-                file.display()
-            );
+        for (op, file) in self.plan.steps {
+            if op == self.driver.stdin_op {
+                println!("{}: (stdin) -> {}", op, file.display());
+            } else if op == self.driver.stdout_op {
+                println!("{}: (stdout)", op);
+            } else {
+                println!("{}: {} -> {}", op, self.driver.ops[op].name, file.display());
+            }
         }
     }
 
@@ -56,6 +57,11 @@ impl<'a> Run<'a> {
 
         // Show all states.
         for (state_ref, state) in self.driver.states.iter() {
+            // Hide our "special" state for stdin/stdout.
+            if state_ref == self.driver.ops[self.driver.stdin_op].input {
+                continue;
+            }
+
             print!("  {} [", state_ref);
             if let Some(filename) = states.get(&state_ref) {
                 print!(
@@ -70,6 +76,11 @@ impl<'a> Run<'a> {
 
         // Show all operations.
         for (op_ref, op) in self.driver.ops.iter() {
+            // Don't bother showing our "special" operations.
+            if op_ref == self.driver.stdin_op || op_ref == self.driver.stdout_op {
+                continue;
+            }
+
             print!("  {} -> {} [label=\"{}\"", op.input, op.output, op.name);
             if ops.contains(&op_ref) {
                 print!(" penwidth=3");
