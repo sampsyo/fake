@@ -110,12 +110,19 @@ impl<'a> Run<'a> {
         // TODO: This workaround for lifetime stuff in the config isn't great.
         let keep = self.config.global.keep_build_dir;
         let ninja = self.config.global.ninja.clone();
+        let stdout = self.plan.steps.last().unwrap().0 == self.driver.stdout_op;
 
         let stale_dir = dir.exists();
         self.emit_to_dir(dir)?;
 
         // Run `ninja` in the working directory.
-        Command::new(ninja).current_dir(dir).status()?;
+        let mut cmd = Command::new(ninja);
+        cmd.current_dir(dir);
+        if stdout {
+            // When we're printing to stdout, suppress Ninja's output.
+            cmd.arg("--quiet");
+        }
+        cmd.status()?;
 
         // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
         if !keep && !stale_dir {
