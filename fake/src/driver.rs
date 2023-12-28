@@ -281,6 +281,7 @@ impl DriverBuilder {
 
         let stdin_setup = self.setup("stdin", |e| {
             e.rule("capture", "cat > $out")?;
+            writeln!(e.out, "  pool = console")?;
             Ok(())
         });
         let stdin = self.op(
@@ -298,6 +299,7 @@ impl DriverBuilder {
 
         let stdout_setup = self.setup("stdout", |e| {
             e.rule("show", "cat $in")?;
+            writeln!(e.out, "  pool = console")?;
             Ok(())
         });
         let stdout = self.rule(Some(stdout_setup), null_state, null_state, "show");
