@@ -130,6 +130,17 @@ impl<'a> Run<'a> {
             }
         }
 
+        // Possibly capture the first input from stdin.
+        if self.plan.stdin {
+            emitter.comment("capture input from stdin")?;
+            emitter.rule("capture", "cat > $out")?;
+            write!(emitter.out, "build ")?;
+            emitter.filename(&self.plan.start)?;
+            writeln!(emitter.out, ": capture")?;
+            writeln!(emitter.out, "  pool = console")?;
+            writeln!(emitter.out)?;
+        }
+
         // Emit the build commands for each step in the plan.
         writeln!(emitter.out, "# build targets")?;
         let mut last_file = self.plan.start;

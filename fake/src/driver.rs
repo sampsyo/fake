@@ -137,12 +137,10 @@ impl Driver {
         Some(op_path)
     }
 
-    fn gen_name(&self, stem: &OsStr, op: OpRef) -> PathBuf {
-        // Pick an appropriate extension for the output of this operation.
-        let op = &self.ops[op];
-        let ext = &self.states[op.output].extensions[0];
-
+    /// Generate a filename with an extension appropriate for the given State.
+    fn gen_name(&self, stem: &OsStr, state: StateRef) -> PathBuf {
         // TODO avoid collisions in case we reuse extensions...
+        let ext = &self.states[state].extensions[0];
         PathBuf::from(stem).with_extension(ext)
     }
 
@@ -150,12 +148,21 @@ impl Driver {
         // Find a path through the states.
         let path = self.find_path(req.start_state, req.end_state)?;
 
+        // Get the initial input filename and the stem to use to generate all intermediate filenames.
+        let (stdin, start_file) = match req.start_file {
+            Some(path) => (false, path),
+            None => (
+                true,
+                self.gen_name(OsStr::new("stdin"), self.ops[path[0]].input),
+            ),
+        };
+        let stem = start_file.file_stem().unwrap();
+
         // Generate filenames for each step.
-        let stem = req.start_file.file_stem().expect("input filename missing");
         let mut steps: Vec<_> = path
             .into_iter()
             .map(|op| {
-                let filename = self.gen_name(stem, op);
+                let filename = self.gen_name(stem, self.ops[op].output);
                 (op, filename)
             })
             .collect();
@@ -171,9 +178,9 @@ impl Driver {
         };
 
         Some(Plan {
-            start: req.start_file,
+            start: start_file,
             steps,
-            stdin: false,
+            stdin,
             stdout,
         })
     }
@@ -275,11 +282,19 @@ impl DriverBuilder {
     }
 }
 
+/// A request to the Driver directing it what to build.
 #[derive(Debug)]
 pub struct Request {
+    /// The input format.
     pub start_state: StateRef,
-    pub start_file: PathBuf,
+
+    /// The output format to produce.
     pub end_state: StateRef,
+
+    /// The filename to read the input from, or None to read from stdin.
+    pub start_file: Option<PathBuf>,
+
+    /// The filename to write the output to, or None to print to stdout.
     pub end_file: Option<PathBuf>,
 }
 

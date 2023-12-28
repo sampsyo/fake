@@ -1,6 +1,6 @@
 use crate::driver::{Driver, Request, StateRef};
 use crate::run::Run;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use argh::FromArgs;
 use std::fmt::Display;
 use std::path::Path;
@@ -47,7 +47,7 @@ impl Display for Mode {
 struct FakeArgs {
     /// the input file
     #[argh(positional)]
-    input: PathBuf,
+    input: Option<PathBuf>,
 
     /// the output file
     #[argh(option, short = 'o')]
@@ -80,9 +80,12 @@ fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
         Some(name) => driver
             .get_state(name)
             .ok_or(anyhow!("unknown --from state")),
-        None => driver
-            .guess_state(&args.input)
-            .ok_or(anyhow!("could not infer input state")),
+        None => match args.input {
+            Some(ref input) => driver
+                .guess_state(input)
+                .ok_or(anyhow!("could not infer input state")),
+            None => bail!("specify an input file or use --from"),
+        },
     }
 }
 
@@ -99,7 +102,7 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
 }
 
 fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> anyhow::Result<Request> {
-    let in_path = relative_path(&args.input, workdir);
+    let in_path = args.input.as_ref().map(|p| relative_path(p, workdir));
     let out_path = args.output.as_ref().map(|p| relative_path(p, workdir));
 
     Ok(Request {
