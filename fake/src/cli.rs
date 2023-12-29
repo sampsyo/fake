@@ -2,6 +2,7 @@ use crate::driver::{Driver, Request, StateRef};
 use crate::run::Run;
 use anyhow::{anyhow, bail};
 use argh::FromArgs;
+use pathdiff::diff_paths;
 use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
@@ -114,33 +115,13 @@ fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> anyhow::Resu
     })
 }
 
-/// Generate a path referring to the same file as `path` that is usable when the working directory
-/// is `base`. This can always just be `path.canonical()` as a fallback, but sometimes we can
-/// opportunistically make it a little friendlier.
+/// Get a version of `path` that works when the working directory is `base`. This is
+/// opportunistically a relative path, but we can always fall back to an absolute path to make sure
+/// the path still works.
 fn relative_path(path: &Path, base: &Path) -> PathBuf {
-    if base == Path::new(".") || path.is_absolute() {
-        path.to_path_buf()
-    } else if path.starts_with(base) {
-        path.strip_prefix(base).unwrap().to_path_buf()
-    } else if base.is_relative() {
-        if base
-            .components()
-            .any(|c| c == std::path::Component::ParentDir)
-        {
-            // Too hard to handle base paths with `..`.
-            path.canonicalize().unwrap()
-        } else {
-            // A special case when, e.g., base is just a subdirectory of cwd. We
-            // can get "back" to the current directroy above base via `..`.
-            let mut out = PathBuf::new();
-            for _ in base.components() {
-                out.push("..");
-            }
-            out.push(path);
-            out
-        }
-    } else {
-        path.canonicalize().unwrap()
+    match diff_paths(path, base) {
+        Some(p) => p,
+        None => path.canonicalize().expect("could not get absolute path"),
     }
 }
 
