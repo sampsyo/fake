@@ -62,6 +62,7 @@ fn build_driver() -> Driver {
 
         // The input data file.
         // TODO Also needs some utility-ization...
+        // TODO Should not have a default; error when `sim.data` is missing.
         let data_path =
             e.external_path(std::path::Path::new(&e.config_or("sim.data", "data.json")));
         write!(e.out, "data = ")?;
@@ -92,7 +93,6 @@ fn build_driver() -> Driver {
             e.build("icarus-compile", input, bin_name)?;
 
             // TODO utilities need a revamp to make these nicer...
-            //
             e.build(
                 "hex-data",
                 std::path::Path::new("$data"),
