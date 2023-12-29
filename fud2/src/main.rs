@@ -60,10 +60,17 @@ fn build_driver() -> Driver {
         e.add_file("tb.sv", &TB_SV)?;
         e.var("testbench", "tb.sv")?;
 
+        // The input data file.
+        // TODO Also needs some utility-ization...
+        let data_path =
+            e.external_path(std::path::Path::new(&e.config_or("sim.data", "data.json")));
+        write!(e.out, "data = ")?;
+        e.filename(&data_path)?;
+        writeln!(e.out)?;
+
         e.var("icarus_exec", "iverilog")?;
         e.var("datadir", "data")?;
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
-        e.config_var_or("data", "sim.data", "data.json")?; // TODO: Should be relative to workdir.
         e.rule(
             "icarus-compile",
             "$icarus_exec -g2012 -o $out $testbench $in",

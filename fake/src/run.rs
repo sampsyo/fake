@@ -1,5 +1,5 @@
 use crate::config;
-use crate::driver::{Driver, OpRef, Plan, SetupRef, StateRef};
+use crate::driver::{relative_path, Driver, OpRef, Plan, SetupRef, StateRef};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -249,5 +249,12 @@ impl Emitter {
         let path = self.workdir.join(name);
         std::fs::write(path, contents)?;
         Ok(())
+    }
+
+    /// Get a path to an external file. The input `path` may be relative to our original
+    /// invocation; we make it relative to the build directory so it can safely be used in the
+    /// Ninja file.
+    pub fn external_path(&self, path: &Path) -> PathBuf {
+        relative_path(path, &self.workdir)
     }
 }

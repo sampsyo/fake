@@ -87,7 +87,7 @@ impl EmitSetup for EmitSetupFn {
 /// Get a version of `path` that works when the working directory is `base`. This is
 /// opportunistically a relative path, but we can always fall back to an absolute path to make sure
 /// the path still works.
-fn relative_path(path: &Path, base: &Path) -> PathBuf {
+pub fn relative_path(path: &Path, base: &Path) -> PathBuf {
     match diff_paths(path, base) {
         Some(p) => p,
         None => path.canonicalize().expect("could not get absolute path"),
