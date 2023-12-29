@@ -53,7 +53,7 @@ fn build_driver() -> Driver {
     let data_setup = bld.setup("data conversion for RTL simulation", |e| {
         e.add_file("json-dat.py", &JSON_DAT)?;
         e.rule("hex-data", "python3 json-dat.py --from-json $in $out")?;
-        e.rule("json-data", "python3 json-dat.py --to-json $datadir $out")?;
+        e.rule("json-data", "python3 json-dat.py --to-json $in $out")?;
         Ok(())
     });
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
@@ -102,9 +102,8 @@ fn build_driver() -> Driver {
 
             write!(e.out, "build ")?;
             e.filename(output)?;
-            write!(e.out, ": json-data $datadir _sim")?;
+            write!(e.out, ": json-data $datadir | _sim")?;
             writeln!(e.out)?;
-            writeln!(e.out, "  datadir = $datadir")?;
 
             Ok(())
         },
