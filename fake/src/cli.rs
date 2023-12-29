@@ -2,9 +2,7 @@ use crate::driver::{Driver, Request, StateRef};
 use crate::run::Run;
 use anyhow::{anyhow, bail};
 use argh::FromArgs;
-use pathdiff::diff_paths;
 use std::fmt::Display;
-use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -102,32 +100,7 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
     }
 }
 
-fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> anyhow::Result<Request> {
-    let in_path = args.input.as_ref().map(|p| relative_path(p, workdir));
-    let out_path = args.output.as_ref().map(|p| relative_path(p, workdir));
-
-    Ok(Request {
-        start_file: in_path,
-        start_state: from_state(driver, args)?,
-        end_file: out_path,
-        end_state: to_state(driver, args)?,
-        workdir: workdir.into(),
-    })
-}
-
-/// Get a version of `path` that works when the working directory is `base`. This is
-/// opportunistically a relative path, but we can always fall back to an absolute path to make sure
-/// the path still works.
-fn relative_path(path: &Path, base: &Path) -> PathBuf {
-    match diff_paths(path, base) {
-        Some(p) => p,
-        None => path.canonicalize().expect("could not get absolute path"),
-    }
-}
-
-pub fn cli(driver: &Driver) -> anyhow::Result<()> {
-    let args: FakeArgs = argh::from_env();
-
+fn get_request(driver: &Driver, args: &FakeArgs) -> anyhow::Result<Request> {
     // The default working directory (if not specified) depends on the mode.
     let workdir = args.dir.clone().unwrap_or_else(|| {
         PathBuf::from(match args.mode {
@@ -136,8 +109,21 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
         })
     });
 
+    Ok(Request {
+        start_file: args.input.clone(),
+        start_state: from_state(driver, args)?,
+        end_file: args.output.clone(),
+        end_state: to_state(driver, args)?,
+        workdir,
+    })
+}
+
+pub fn cli(driver: &Driver) -> anyhow::Result<()> {
+    let args: FakeArgs = argh::from_env();
+
     // Make a plan.
-    let req = get_request(driver, &args, &workdir)?;
+    let req = get_request(driver, &args)?;
+    let workdir = req.workdir.clone();
     let plan = driver.plan(req).ok_or(anyhow!("could not find path"))?;
 
     // Configure.

@@ -1,5 +1,6 @@
 use crate::run::Emitter;
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
+use pathdiff::diff_paths;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -83,6 +84,16 @@ impl EmitSetup for EmitSetupFn {
     }
 }
 
+/// Get a version of `path` that works when the working directory is `base`. This is
+/// opportunistically a relative path, but we can always fall back to an absolute path to make sure
+/// the path still works.
+fn relative_path(path: &Path, base: &Path) -> PathBuf {
+    match diff_paths(path, base) {
+        Some(p) => p,
+        None => path.canonicalize().expect("could not get absolute path"),
+    }
+}
+
 /// A Driver encapsulates a set of States and the Operations that can transform between them. It
 /// contains all the machinery to perform builds in a given ecosystem.
 pub struct Driver {
@@ -154,7 +165,7 @@ impl Driver {
 
         // Get the initial input filename and the stem to use to generate all intermediate filenames.
         let start_file = match req.start_file {
-            Some(path) => path,
+            Some(path) => relative_path(&path, &req.workdir),
             None => {
                 // Use the special "stdin" operator to capture the input file.
                 let filename = self.gen_name(OsStr::new("stdin"), self.ops[path[0]].input);
@@ -172,8 +183,9 @@ impl Driver {
 
         if let Some(end_file) = req.end_file {
             // If we have a specified output filename, use that instead of the generated one.
+            // TODO Can we just avoid generating the unused filename in the first place?
             let last_step = steps.last_mut().expect("no steps");
-            last_step.1 = end_file; // TODO Can we just avoid generating the filename in the first place?
+            last_step.1 = relative_path(&end_file, &req.workdir);
             false
         } else {
             // Use the special "stdout" operator to show the output.
