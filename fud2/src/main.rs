@@ -49,14 +49,14 @@ fn build_driver() -> Driver {
     });
     bld.rule(&[mrxl_setup], mrxl, calyx, "mrxl-to-calyx");
 
-    // Icarus Verilog.
-    let data_setup = bld.setup("data conversion for RTL simulation", |e| {
+    // Shared machinery for RTL simulators.
+    let sim_setup = bld.setup("RTL simulation", |e| {
+        // Data conversion to and from JSON.
         e.add_file("json-dat.py", &JSON_DAT)?;
         e.rule("hex-data", "python3 json-dat.py --from-json $in $out")?;
         e.rule("json-data", "python3 json-dat.py --to-json $in $out")?;
-        Ok(())
-    });
-    let icarus_setup = bld.setup("Icarus Verilog", |e| {
+
+        // The Verilog testbench.
         // TODO I wish we could somehow refer to pre-existing files… would make "emit" mode nicer.
         e.add_file("tb.sv", &TB_SV)?;
         e.var("testbench", "tb.sv")?;
@@ -64,8 +64,13 @@ fn build_driver() -> Driver {
         // The input data file. `sim.data` is required.
         let data_name = e.config_val("sim.data");
         let data_path = e.external_path(data_name.as_ref());
-        e.var("data", data_path.as_str())?;
+        e.var("sim_data", data_path.as_str())?;
 
+        Ok(())
+    });
+
+    // Icarus Verilog.
+    let icarus_setup = bld.setup("Icarus Verilog", |e| {
         e.var("icarus_exec", "iverilog")?;
         e.var("datadir", "data")?;
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
@@ -77,18 +82,17 @@ fn build_driver() -> Driver {
             "icarus-sim",
             "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1",
         )?;
-
         Ok(())
     });
     bld.op(
         "icarus",
-        &[data_setup, icarus_setup],
+        &[sim_setup, icarus_setup],
         verilog,
         dat,
         |e, input, output| {
             let bin_name = "icarus_bin";
             e.build("icarus-compile", input, bin_name)?;
-            e.build("hex-data", "$data", "$datadir")?;
+            e.build("hex-data", "$sim_data", "$datadir")?;
 
             e.build_cmd("_sim", "icarus-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
