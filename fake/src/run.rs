@@ -2,7 +2,7 @@ use crate::config;
 use crate::driver::{Driver, OpRef, Plan, SetupRef, StateRef};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct Run<'a> {
@@ -133,14 +133,14 @@ impl<'a> Run<'a> {
     }
 
     fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
-        let mut emitter = Emitter::new(out, self.config.data);
+        let mut emitter = Emitter::new(out, self.config.data, self.plan.workdir);
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
         for (op, _) in &self.plan.steps {
-            if let Some(setup) = self.driver.ops[*op].setup {
-                if done_setups.insert(setup) {
-                    let setup = &self.driver.setups[setup];
+            for setup in &self.driver.ops[*op].setups {
+                if done_setups.insert(*setup) {
+                    let setup = &self.driver.setups[*setup];
                     writeln!(emitter.out, "# {}", setup.name)?; // TODO more descriptive name
                     setup.emit.setup(&mut emitter)?;
                     writeln!(emitter.out)?;
@@ -170,13 +170,15 @@ impl<'a> Run<'a> {
 pub struct Emitter {
     pub out: Box<dyn Write>,
     pub config: figment::Figment,
+    pub workdir: PathBuf,
 }
 
 impl Emitter {
-    fn new<T: Write + 'static>(out: T, config: figment::Figment) -> Self {
+    fn new<T: Write + 'static>(out: T, config: figment::Figment, workdir: PathBuf) -> Self {
         Self {
             out: Box::new(out),
             config,
+            workdir,
         }
     }
 
@@ -239,6 +241,13 @@ impl Emitter {
     pub fn filename(&mut self, path: &Path) -> std::io::Result<()> {
         // This seems like the best/only way to portably preserve the raw filename??
         self.out.write_all(path.as_os_str().as_encoded_bytes())?;
+        Ok(())
+    }
+
+    /// Add a file to the build directory.
+    pub fn add_file(&self, name: &str, contents: &[u8]) -> std::io::Result<()> {
+        let path = self.workdir.join(name);
+        std::fs::write(path, contents)?;
         Ok(())
     }
 }

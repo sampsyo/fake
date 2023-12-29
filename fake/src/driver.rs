@@ -19,7 +19,7 @@ pub struct Operation {
     pub name: String,
     pub input: StateRef,
     pub output: StateRef,
-    pub setup: Option<SetupRef>,
+    pub setups: Vec<SetupRef>,
     pub emit: Box<dyn EmitBuild>,
 }
 
@@ -184,6 +184,7 @@ impl Driver {
         Some(Plan {
             start: start_file,
             steps,
+            workdir: req.workdir,
         })
     }
 
@@ -221,14 +222,14 @@ impl DriverBuilder {
     fn add_op<T: EmitBuild + 'static>(
         &mut self,
         name: &str,
-        setup: Option<SetupRef>,
+        setups: &[SetupRef],
         input: StateRef,
         output: StateRef,
         emit: T,
     ) -> OpRef {
         self.ops.push(Operation {
-            name: name.to_string(),
-            setup,
+            name: name.into(),
+            setups: setups.into(),
             input,
             output,
             emit: Box::new(emit),
@@ -249,24 +250,24 @@ impl DriverBuilder {
     pub fn op(
         &mut self,
         name: &str,
-        setup: Option<SetupRef>,
+        setups: &[SetupRef],
         input: StateRef,
         output: StateRef,
         build: EmitBuildFn,
     ) -> OpRef {
-        self.add_op(name, setup, input, output, build)
+        self.add_op(name, setups, input, output, build)
     }
 
     pub fn rule(
         &mut self,
-        setup: Option<SetupRef>,
+        setups: &[SetupRef],
         input: StateRef,
         output: StateRef,
         rule_name: &str,
     ) -> OpRef {
         self.add_op(
             rule_name,
-            setup,
+            setups,
             input,
             output,
             EmitRuleBuild {
@@ -286,7 +287,7 @@ impl DriverBuilder {
         });
         let stdin = self.op(
             "stdin",
-            Some(stdin_setup),
+            &[stdin_setup],
             null_state,
             null_state,
             |e, _, output| {
@@ -302,7 +303,7 @@ impl DriverBuilder {
             writeln!(e.out, "  pool = console")?;
             Ok(())
         });
-        let stdout = self.rule(Some(stdout_setup), null_state, null_state, "show");
+        let stdout = self.rule(&[stdout_setup], null_state, null_state, "show");
 
         (stdin, stdout)
     }
@@ -333,6 +334,9 @@ pub struct Request {
 
     /// The filename to write the output to, or None to print to stdout.
     pub end_file: Option<PathBuf>,
+
+    /// The working directory for the build.
+    pub workdir: PathBuf,
 }
 
 #[derive(Debug)]
@@ -342,4 +346,7 @@ pub struct Plan {
 
     /// The chain of operations to run and each step's output file.
     pub steps: Vec<(OpRef, PathBuf)>,
+
+    /// The directory that the build will happen in.
+    pub workdir: PathBuf,
 }

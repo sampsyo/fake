@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 fake = { path = "../fake" }
 anyhow.workspace = true
+lazy-static-include = "3.2.1"

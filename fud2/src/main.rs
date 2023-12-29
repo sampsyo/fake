@@ -1,4 +1,10 @@
 use fake::{cli, Driver, DriverBuilder};
+use lazy_static_include::*;
+
+lazy_static_include_bytes! {
+    JSON_DAT => "data/json-dat.py",
+    TB_SV => "data/tb.sv",
+}
 
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
@@ -7,20 +13,22 @@ fn build_driver() -> Driver {
     let mrxl = bld.state("mrxl", &["mrxl"]);
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv", "v"]);
+    let dat = bld.state("dat", &["json"]);
 
     // Calyx.
+    // TODO: Currently hard-coding `--disable-verify`; this is only necessary for Icraus.
     let calyx_setup = bld.setup("Calyx compiler", |e| {
         e.config_var("calyx_base", "calyx.base")?;
         e.config_var_or("calyx_exe", "calyx.exe", "$calyx_base/target/debug/calyx")?;
         e.rule(
             "calyx-to-verilog",
-            "$calyx_exe -l $calyx_base -b verilog $in -o $out",
+            "$calyx_exe -l $calyx_base -b verilog --disable-verify $in > $out",
         )?;
         e.rule("calyx-to-calyx", "$calyx_exe -l $calyx_base $in -o $out")?;
         Ok(())
     });
-    bld.rule(Some(calyx_setup), calyx, verilog, "calyx-to-verilog");
-    bld.rule(Some(calyx_setup), calyx, calyx, "calyx-to-calyx");
+    bld.rule(&[calyx_setup], calyx, verilog, "calyx-to-verilog");
+    bld.rule(&[calyx_setup], calyx, calyx, "calyx-to-calyx");
 
     // Dahlia.
     let dahlia_setup = bld.setup("Dahlia compiler", |e| {
@@ -31,7 +39,7 @@ fn build_driver() -> Driver {
         )?;
         Ok(())
     });
-    bld.rule(Some(dahlia_setup), dahlia, calyx, "dahlia-to-calyx");
+    bld.rule(&[dahlia_setup], dahlia, calyx, "dahlia-to-calyx");
 
     // MrXL.
     let mrxl_setup = bld.setup("MrXL compiler", |e| {
@@ -39,7 +47,68 @@ fn build_driver() -> Driver {
         e.rule("mrxl-to-calyx", "$mrxl_exec $in > $out")?;
         Ok(())
     });
-    bld.rule(Some(mrxl_setup), mrxl, calyx, "mrxl-to-calyx");
+    bld.rule(&[mrxl_setup], mrxl, calyx, "mrxl-to-calyx");
+
+    // Icarus Verilog.
+    let data_setup = bld.setup("data conversion for RTL simulation", |e| {
+        e.add_file("json-dat.py", &JSON_DAT)?;
+        e.rule("hex-data", "python3 json-dat.py --from-json $in $out")?;
+        e.rule("json-data", "python3 json-dat.py --to-json $datadir $out")?;
+        Ok(())
+    });
+    let icarus_setup = bld.setup("Icarus Verilog", |e| {
+        e.add_file("tb.sv", &TB_SV)?;
+        e.var("testbench", "tb.sv")?;
+
+        e.var("icarus_exec", "iverilog")?;
+        e.var("datadir", "data")?;
+        e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
+        e.config_var_or("data", "sim.data", "data.json")?; // TODO: Should be relative to workdir.
+        e.rule(
+            "icarus-compile",
+            "$icarus_exec -g2012 -o $out $testbench $in",
+        )?;
+        e.rule(
+            "icarus-sim",
+            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1",
+        )?;
+
+        Ok(())
+    });
+    bld.op(
+        "icarus",
+        &[data_setup, icarus_setup],
+        verilog,
+        dat,
+        |e, input, output| {
+            let bin_name = std::path::Path::new("icarus_bin");
+            e.build("icarus-compile", input, bin_name)?;
+
+            // TODO utilities need a revamp to make these nicer...
+            //
+            e.build(
+                "hex-data",
+                std::path::Path::new("$data"),
+                std::path::Path::new("$datadir"),
+            )?;
+
+            write!(e.out, "build _sim: icarus-sim ")?;
+            e.filename(bin_name)?;
+            write!(e.out, " $datadir")?;
+            writeln!(e.out)?;
+            write!(e.out, "  bin = ")?;
+            e.filename(bin_name)?;
+            writeln!(e.out)?;
+
+            write!(e.out, "build ")?;
+            e.filename(output)?;
+            write!(e.out, ": json-data $datadir _sim")?;
+            writeln!(e.out)?;
+            writeln!(e.out, "  datadir = $datadir")?;
+
+            Ok(())
+        },
+    );
 
     bld.build()
 }

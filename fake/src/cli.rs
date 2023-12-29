@@ -110,6 +110,7 @@ fn get_request(driver: &Driver, args: &FakeArgs, workdir: &Path) -> anyhow::Resu
         start_state: from_state(driver, args)?,
         end_file: out_path,
         end_state: to_state(driver, args)?,
+        workdir: workdir.into(),
     })
 }
 
