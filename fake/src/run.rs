@@ -214,9 +214,30 @@ impl Emitter {
         Ok(())
     }
 
-    /// Emit a Ninja build command.
+    /// Emit a simple Ninja build command with one dependency.
     pub fn build(&mut self, rule: &str, input: &str, output: &str) -> std::io::Result<()> {
-        writeln!(self.out, "build {}: {} {}", output, rule, input)?;
+        self.build_cmd(output, rule, &[input], &[])
+    }
+
+    /// Emit a Ninja build command.
+    pub fn build_cmd(
+        &mut self,
+        target: &str,
+        rule: &str,
+        deps: &[&str],
+        implicit_deps: &[&str],
+    ) -> std::io::Result<()> {
+        write!(self.out, "build {}: {}", target, rule)?;
+        for dep in deps {
+            write!(self.out, " {}", dep)?;
+        }
+        if !implicit_deps.is_empty() {
+            write!(self.out, " |")?;
+            for dep in implicit_deps {
+                write!(self.out, " {}", dep)?;
+            }
+        }
+        writeln!(self.out)?;
         Ok(())
     }
 

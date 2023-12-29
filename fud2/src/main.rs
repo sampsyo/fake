@@ -57,6 +57,7 @@ fn build_driver() -> Driver {
         Ok(())
     });
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
+        // TODO I wish we could somehow refer to pre-existing files… would make "emit" mode nicer.
         e.add_file("tb.sv", &TB_SV)?;
         e.var("testbench", "tb.sv")?;
 
@@ -89,10 +90,9 @@ fn build_driver() -> Driver {
             e.build("icarus-compile", input, bin_name)?;
             e.build("hex-data", "$data", "$datadir")?;
 
-            // TODO Better utilities...
-            writeln!(e.out, "build _sim: icarus-sim {} $datadir", bin_name)?;
+            e.build_cmd("_sim", "icarus-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
-            writeln!(e.out, "build {}: json-data $datadir | _sim", output)?;
+            e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
 
             Ok(())
         },
