@@ -23,30 +23,15 @@ impl Default for GlobalConfig {
     }
 }
 
-pub struct Config {
-    pub global: GlobalConfig,
-    pub data: Figment,
-}
+/// Load configuration data from the standard config file location.
+pub fn load_config() -> Figment {
+    // The configuration is usually at `~/.config/fake.toml`.
+    let config_base = env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
+        let home = env::var("HOME").expect("$HOME not set");
+        home + "/.config"
+    });
+    let config_path = Path::new(&config_base).join("fake.toml");
 
-impl Config {
-    fn figment() -> Figment {
-        // The configuration is usually at `~/.config/fake.toml`.
-        let config_base = env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
-            let home = env::var("HOME").expect("$HOME not set");
-            home + "/.config"
-        });
-        let config_path = Path::new(&config_base).join("fake.toml");
-
-        // Use our defaults, overridden by the TOML config file.
-        Figment::from(Serialized::defaults(GlobalConfig::default())).merge(Toml::file(config_path))
-    }
-
-    pub fn new() -> Result<Self, figment::Error> {
-        let fig = Self::figment();
-        let cfg: GlobalConfig = fig.extract()?;
-        Ok(Self {
-            data: fig,
-            global: cfg,
-        })
-    }
+    // Use our defaults, overridden by the TOML config file.
+    Figment::from(Serialized::defaults(GlobalConfig::default())).merge(Toml::file(config_path))
 }

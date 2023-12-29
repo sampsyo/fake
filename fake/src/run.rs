@@ -8,15 +8,20 @@ use std::process::Command;
 pub struct Run<'a> {
     pub driver: &'a Driver,
     pub plan: Plan,
-    pub config: config::Config,
+    pub config_data: figment::Figment,
+    pub global_config: config::GlobalConfig,
 }
 
 impl<'a> Run<'a> {
     pub fn new(driver: &'a Driver, plan: Plan) -> Self {
+        let config_data = config::load_config();
+        let global_config: config::GlobalConfig =
+            config_data.extract().expect("failed to load config");
         Self {
             driver,
             plan,
-            config: config::Config::new().expect("failed to load config"),
+            config_data,
+            global_config,
         }
     }
 
@@ -102,8 +107,8 @@ impl<'a> Run<'a> {
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
     pub fn emit_and_run(self, dir: &Utf8Path) -> Result<(), std::io::Error> {
         // TODO: This workaround for lifetime stuff in the config isn't great.
-        let keep = self.config.global.keep_build_dir;
-        let ninja = self.config.global.ninja.clone();
+        let keep = self.global_config.keep_build_dir;
+        let ninja = self.global_config.ninja.clone();
         let stdout = self.plan.steps.last().unwrap().0 == self.driver.stdout_op;
 
         let stale_dir = dir.exists();
@@ -127,7 +132,7 @@ impl<'a> Run<'a> {
     }
 
     fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
-        let mut emitter = Emitter::new(out, self.config.data, self.plan.workdir);
+        let mut emitter = Emitter::new(out, self.config_data, self.plan.workdir);
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();

@@ -72,6 +72,10 @@ struct FakeArgs {
     /// in run mode, keep the temporary directory
     #[argh(switch)]
     keep: Option<bool>,
+
+    /// set a configuration variable (key=value)
+    #[argh(option, short = 's')]
+    set: Vec<String>,
 }
 
 fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
@@ -129,8 +133,23 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
 
     // Configure.
     let mut run = Run::new(driver, plan);
+
+    // The `--keep` argument overrides the global `keep` config option.
     if let Some(keep) = args.keep {
-        run.config.global.keep_build_dir = keep;
+        run.global_config.keep_build_dir = keep;
+    }
+
+    // Use `--set` arguments to override configuration values.
+    for set in args.set {
+        let mut parts = set.splitn(2, '=');
+        let key = parts.next().unwrap();
+        let value = parts
+            .next()
+            .ok_or(anyhow!("--set arguments must be in key=value form"))?;
+        let dict = figment::util::nest(key, value.into());
+        run.config_data = run
+            .config_data
+            .merge(figment::providers::Serialized::defaults(dict));
     }
 
     // Execute.
