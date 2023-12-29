@@ -60,10 +60,8 @@ fn build_driver() -> Driver {
         e.add_file("tb.sv", &TB_SV)?;
         e.var("testbench", "tb.sv")?;
 
-        // The input data file.
-        // TODO Also needs some utility-ization...
-        // TODO Should not have a default; error when `sim.data` is missing.
-        let data_name = e.config_or("sim.data", "data.json");
+        // The input data file. `sim.data` is required.
+        let data_name = e.config_val("sim.data");
         let data_path = e.external_path(data_name.as_ref());
         e.var("data", data_path.as_str())?;
 
