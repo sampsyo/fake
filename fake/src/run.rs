@@ -239,4 +239,10 @@ impl Emitter {
     pub fn external_path(&self, path: &Utf8Path) -> Utf8PathBuf {
         relative_path(path, &self.workdir)
     }
+
+    /// Add a variable parameter to a rule or build command.
+    pub fn arg(&mut self, name: &str, value: &str) -> std::io::Result<()> {
+        writeln!(self.out, "  {} = {}", name, value)?;
+        Ok(())
+    }
 }

@@ -91,7 +91,7 @@ fn build_driver() -> Driver {
 
             // TODO Better utilities...
             writeln!(e.out, "build _sim: icarus-sim {} $datadir", bin_name)?;
-            writeln!(e.out, "  bin = {}", bin_name)?;
+            e.arg("bin", bin_name)?;
             writeln!(e.out, "build {}: json-data $datadir | _sim", output)?;
 
             Ok(())
