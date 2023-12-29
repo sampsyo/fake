@@ -66,18 +66,17 @@ fn build_driver() -> Driver {
         let data_path = e.external_path(data_name.as_ref());
         e.var("sim_data", data_path.as_str())?;
 
+        // More shared configuration.
+        e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
+
         Ok(())
     });
 
     // Icarus Verilog.
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
-        e.var("icarus_exec", "iverilog")?;
+        e.var("iverilog", "iverilog")?;
         e.var("datadir", "data")?;
-        e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
-        e.rule(
-            "icarus-compile",
-            "$icarus_exec -g2012 -o $out $testbench $in",
-        )?;
+        e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
         e.rule(
             "icarus-sim",
             "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1",
@@ -95,6 +94,40 @@ fn build_driver() -> Driver {
             e.build("hex-data", "$sim_data", "$datadir")?;
 
             e.build_cmd("_sim", "icarus-sim", &[bin_name, "$datadir"], &[])?;
+            e.arg("bin", bin_name)?;
+            e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
+
+            Ok(())
+        },
+    );
+
+    // Verilator.
+    let verilator_setup = bld.setup("Verilator", |e| {
+        e.var("verilator", "verilator")?;
+        e.var("datadir", "data")?;
+        e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
+        e.rule(
+            "verilator-compile",
+            "$verilator --trace $in $testbench --binary --top-module TOP -fno-inline",
+        )?;
+        e.rule(
+            "verilator-sim",
+            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1",
+        )?;
+        Ok(())
+    });
+    bld.op(
+        "verilator",
+        &[sim_setup, verilator_setup],
+        verilog,
+        dat,
+        |e, input, output| {
+            // TODO share as much as possible with Icarus...
+            let bin_name = "verilator_bin";
+            e.build("verilator-compile", input, bin_name)?;
+            e.build("hex-data", "$sim_data", "$datadir")?;
+
+            e.build_cmd("_sim", "verilator-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
             e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
 
