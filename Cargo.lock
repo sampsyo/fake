@@ -55,6 +55,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "374d28ec25809ee0e23827c2ab573d729e293f281dfe393500e7ad618baa61c6"
 
 [[package]]
+name = "camino"
+version = "1.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
+
+[[package]]
 name = "cranelift-entity"
 version = "0.103.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -72,6 +78,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argh",
+ "camino",
  "cranelift-entity",
  "figment",
  "pathdiff",
@@ -162,6 +169,9 @@ name = "pathdiff"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
+dependencies = [
+ "camino",
+]
 
 [[package]]
 name = "proc-macro2"

@@ -63,11 +63,9 @@ fn build_driver() -> Driver {
         // The input data file.
         // TODO Also needs some utility-ization...
         // TODO Should not have a default; error when `sim.data` is missing.
-        let data_path =
-            e.external_path(std::path::Path::new(&e.config_or("sim.data", "data.json")));
-        write!(e.out, "data = ")?;
-        e.filename(&data_path)?;
-        writeln!(e.out)?;
+        let data_name = e.config_or("sim.data", "data.json");
+        let data_path = e.external_path(data_name.as_ref());
+        e.var("data", data_path.as_str())?;
 
         e.var("icarus_exec", "iverilog")?;
         e.var("datadir", "data")?;
@@ -89,28 +87,14 @@ fn build_driver() -> Driver {
         verilog,
         dat,
         |e, input, output| {
-            let bin_name = std::path::Path::new("icarus_bin");
+            let bin_name = "icarus_bin";
             e.build("icarus-compile", input, bin_name)?;
+            e.build("hex-data", "$data", "$datadir")?;
 
-            // TODO utilities need a revamp to make these nicer...
-            e.build(
-                "hex-data",
-                std::path::Path::new("$data"),
-                std::path::Path::new("$datadir"),
-            )?;
-
-            write!(e.out, "build _sim: icarus-sim ")?;
-            e.filename(bin_name)?;
-            write!(e.out, " $datadir")?;
-            writeln!(e.out)?;
-            write!(e.out, "  bin = ")?;
-            e.filename(bin_name)?;
-            writeln!(e.out)?;
-
-            write!(e.out, "build ")?;
-            e.filename(output)?;
-            write!(e.out, ": json-data $datadir | _sim")?;
-            writeln!(e.out)?;
+            // TODO Better utilities...
+            writeln!(e.out, "build _sim: icarus-sim {} $datadir", bin_name)?;
+            writeln!(e.out, "  bin = {}", bin_name)?;
+            writeln!(e.out, "build {}: json-data $datadir | _sim", output)?;
 
             Ok(())
         },

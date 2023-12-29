@@ -1,8 +1,7 @@
 use crate::run::Emitter;
+use camino::{Utf8Path, Utf8PathBuf};
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
-use pathdiff::diff_paths;
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use pathdiff::diff_utf8_paths;
 
 /// A State is a type of file that Operations produce or consume.
 pub struct State {
@@ -49,24 +48,25 @@ impl State {
 
 /// Code to emit a Ninja `build` command.
 pub trait EmitBuild {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()>;
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> std::io::Result<()>;
 }
 
-type EmitBuildFn = fn(&mut Emitter, &Path, &Path) -> std::io::Result<()>;
+type EmitBuildFn = fn(&mut Emitter, &str, &str) -> std::io::Result<()>;
 
 impl EmitBuild for EmitBuildFn {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> std::io::Result<()> {
         self(emitter, input, output)
     }
 }
 
+// TODO make this unnecessary...
 /// A simple `build` emitter that just runs a Ninja rule.
 pub struct EmitRuleBuild {
     pub rule_name: String,
 }
 
 impl EmitBuild for EmitRuleBuild {
-    fn build(&self, emitter: &mut Emitter, input: &Path, output: &Path) -> std::io::Result<()> {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> std::io::Result<()> {
         emitter.build(&self.rule_name, input, output)
     }
 }
@@ -87,10 +87,12 @@ impl EmitSetup for EmitSetupFn {
 /// Get a version of `path` that works when the working directory is `base`. This is
 /// opportunistically a relative path, but we can always fall back to an absolute path to make sure
 /// the path still works.
-pub fn relative_path(path: &Path, base: &Path) -> PathBuf {
-    match diff_paths(path, base) {
+pub fn relative_path(path: &Utf8Path, base: &Utf8Path) -> Utf8PathBuf {
+    match diff_utf8_paths(path, base) {
         Some(p) => p,
-        None => path.canonicalize().expect("could not get absolute path"),
+        None => path
+            .canonicalize_utf8()
+            .expect("could not get absolute path"),
     }
 }
 
@@ -151,24 +153,24 @@ impl Driver {
     }
 
     /// Generate a filename with an extension appropriate for the given State.
-    fn gen_name(&self, stem: &OsStr, state: StateRef) -> PathBuf {
+    fn gen_name(&self, stem: &str, state: StateRef) -> Utf8PathBuf {
         // TODO avoid collisions in case we reuse extensions...
         let ext = &self.states[state].extensions[0];
-        PathBuf::from(stem).with_extension(ext)
+        Utf8PathBuf::from(stem).with_extension(ext)
     }
 
     pub fn plan(&self, req: Request) -> Option<Plan> {
         // Find a path through the states.
         let path = self.find_path(req.start_state, req.end_state)?;
 
-        let mut steps: Vec<(OpRef, PathBuf)> = vec![];
+        let mut steps: Vec<(OpRef, Utf8PathBuf)> = vec![];
 
         // Get the initial input filename and the stem to use to generate all intermediate filenames.
         let start_file = match req.start_file {
             Some(path) => relative_path(&path, &req.workdir),
             None => {
                 // Use the special "stdin" operator to capture the input file.
-                let filename = self.gen_name(OsStr::new("stdin"), self.ops[path[0]].input);
+                let filename = self.gen_name("stdin", self.ops[path[0]].input);
                 steps.push((self.stdin_op, filename.clone()));
                 filename
             }
@@ -189,7 +191,7 @@ impl Driver {
             false
         } else {
             // Use the special "stdout" operator to show the output.
-            steps.push((self.stdout_op, PathBuf::from("_stdout")));
+            steps.push((self.stdout_op, Utf8PathBuf::from("_stdout")));
             true
         };
 
@@ -200,8 +202,8 @@ impl Driver {
         })
     }
 
-    pub fn guess_state(&self, path: &Path) -> Option<StateRef> {
-        let ext = path.extension()?.to_str()?;
+    pub fn guess_state(&self, path: &Utf8Path) -> Option<StateRef> {
+        let ext = path.extension()?;
         self.states
             .iter()
             .find(|(_, state_data)| state_data.ext_matches(ext))
@@ -303,9 +305,7 @@ impl DriverBuilder {
             null_state,
             null_state,
             |e, _, output| {
-                write!(e.out, "build ")?;
-                e.filename(output)?;
-                writeln!(e.out, ": capture")?;
+                writeln!(e.out, "build {}: capture", output)?;
                 Ok(())
             },
         );
@@ -342,23 +342,23 @@ pub struct Request {
     pub end_state: StateRef,
 
     /// The filename to read the input from, or None to read from stdin.
-    pub start_file: Option<PathBuf>,
+    pub start_file: Option<Utf8PathBuf>,
 
     /// The filename to write the output to, or None to print to stdout.
-    pub end_file: Option<PathBuf>,
+    pub end_file: Option<Utf8PathBuf>,
 
     /// The working directory for the build.
-    pub workdir: PathBuf,
+    pub workdir: Utf8PathBuf,
 }
 
 #[derive(Debug)]
 pub struct Plan {
     /// The input to the first step.
-    pub start: PathBuf,
+    pub start: Utf8PathBuf,
 
     /// The chain of operations to run and each step's output file.
-    pub steps: Vec<(OpRef, PathBuf)>,
+    pub steps: Vec<(OpRef, Utf8PathBuf)>,
 
     /// The directory that the build will happen in.
-    pub workdir: PathBuf,
+    pub workdir: Utf8PathBuf,
 }

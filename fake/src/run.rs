@@ -1,8 +1,8 @@
 use crate::config;
 use crate::driver::{relative_path, Driver, OpRef, Plan, SetupRef, StateRef};
+use camino::{Utf8Path, Utf8PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct Run<'a> {
@@ -22,14 +22,14 @@ impl<'a> Run<'a> {
 
     /// Just print the plan for debugging purposes.
     pub fn show(self) {
-        println!("start: {}", self.plan.start.display());
+        println!("start: {}", self.plan.start);
         for (op, file) in self.plan.steps {
             if op == self.driver.stdin_op {
-                println!("{}: (stdin) -> {}", op, file.display());
+                println!("{}: (stdin) -> {}", op, file);
             } else if op == self.driver.stdout_op {
                 println!("{}: (stdout)", op);
             } else {
-                println!("{}: {} -> {}", op, self.driver.ops[op].name, file.display());
+                println!("{}: {} -> {}", op, self.driver.ops[op].name, file);
             }
         }
     }
@@ -43,15 +43,9 @@ impl<'a> Run<'a> {
         let mut states: HashMap<StateRef, String> = HashMap::new();
         let mut ops: HashSet<OpRef> = HashSet::new();
         let first_op = self.plan.steps[0].0;
-        states.insert(
-            self.driver.ops[first_op].input,
-            self.plan.start.to_string_lossy().to_string(),
-        );
+        states.insert(self.driver.ops[first_op].input, self.plan.start.to_string());
         for (op, file) in &self.plan.steps {
-            states.insert(
-                self.driver.ops[*op].output,
-                file.to_string_lossy().to_string(),
-            );
+            states.insert(self.driver.ops[*op].output, file.to_string());
             ops.insert(*op);
         }
 
@@ -97,7 +91,7 @@ impl<'a> Run<'a> {
     }
 
     /// Ensure that a directory exists and write `build.ninja` inside it.
-    pub fn emit_to_dir(self, dir: &Path) -> Result<(), std::io::Error> {
+    pub fn emit_to_dir(self, dir: &Utf8Path) -> Result<(), std::io::Error> {
         std::fs::create_dir_all(dir)?;
         let ninja_path = dir.join("build.ninja");
         let ninja_file = std::fs::File::create(ninja_path)?;
@@ -106,7 +100,7 @@ impl<'a> Run<'a> {
     }
 
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
-    pub fn emit_and_run(self, dir: &Path) -> Result<(), std::io::Error> {
+    pub fn emit_and_run(self, dir: &Utf8Path) -> Result<(), std::io::Error> {
         // TODO: This workaround for lifetime stuff in the config isn't great.
         let keep = self.config.global.keep_build_dir;
         let ninja = self.config.global.ninja.clone();
@@ -153,15 +147,14 @@ impl<'a> Run<'a> {
         let mut last_file = self.plan.start;
         for (op, out_file) in self.plan.steps {
             let op = &self.driver.ops[op];
-            op.emit.build(&mut emitter, &last_file, &out_file)?;
+            op.emit
+                .build(&mut emitter, last_file.as_str(), out_file.as_str())?;
             last_file = out_file;
         }
         writeln!(emitter.out)?;
 
         // Mark the last file as the default target.
-        write!(emitter.out, "default ")?;
-        emitter.filename(&last_file)?;
-        writeln!(emitter.out)?;
+        writeln!(emitter.out, "default {}", last_file)?;
 
         Ok(())
     }
@@ -170,11 +163,11 @@ impl<'a> Run<'a> {
 pub struct Emitter {
     pub out: Box<dyn Write>,
     pub config: figment::Figment,
-    pub workdir: PathBuf,
+    pub workdir: Utf8PathBuf,
 }
 
 impl Emitter {
-    fn new<T: Write + 'static>(out: T, config: figment::Figment, workdir: PathBuf) -> Self {
+    fn new<T: Write + 'static>(out: T, config: figment::Figment, workdir: Utf8PathBuf) -> Self {
         Self {
             out: Box::new(out),
             config,
@@ -222,25 +215,14 @@ impl Emitter {
     }
 
     /// Emit a Ninja build command.
-    pub fn build(&mut self, rule: &str, input: &Path, output: &Path) -> std::io::Result<()> {
-        self.out.write_all(b"build ")?;
-        self.filename(output)?;
-        write!(self.out, ": {} ", rule)?;
-        self.filename(input)?;
-        self.out.write_all(b"\n")?;
+    pub fn build(&mut self, rule: &str, input: &str, output: &str) -> std::io::Result<()> {
+        writeln!(self.out, "build {}: {} {}", output, rule, input)?;
         Ok(())
     }
 
     /// Emit a Ninja comment.
     pub fn comment(&mut self, text: &str) -> std::io::Result<()> {
         writeln!(self.out, "# {}", text)?;
-        Ok(())
-    }
-
-    /// Write a filename to the Ninja file.
-    pub fn filename(&mut self, path: &Path) -> std::io::Result<()> {
-        // This seems like the best/only way to portably preserve the raw filename??
-        self.out.write_all(path.as_os_str().as_encoded_bytes())?;
         Ok(())
     }
 
@@ -254,7 +236,7 @@ impl Emitter {
     /// Get a path to an external file. The input `path` may be relative to our original
     /// invocation; we make it relative to the build directory so it can safely be used in the
     /// Ninja file.
-    pub fn external_path(&self, path: &Path) -> PathBuf {
+    pub fn external_path(&self, path: &Utf8Path) -> Utf8PathBuf {
         relative_path(path, &self.workdir)
     }
 }

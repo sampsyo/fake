@@ -2,8 +2,8 @@ use crate::driver::{Driver, Request, StateRef};
 use crate::run::Run;
 use anyhow::{anyhow, bail};
 use argh::FromArgs;
+use camino::Utf8PathBuf;
 use std::fmt::Display;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 enum Mode {
@@ -46,11 +46,11 @@ impl Display for Mode {
 struct FakeArgs {
     /// the input file
     #[argh(positional)]
-    input: Option<PathBuf>,
+    input: Option<Utf8PathBuf>,
 
     /// the output file
     #[argh(option, short = 'o')]
-    output: Option<PathBuf>,
+    output: Option<Utf8PathBuf>,
 
     /// the state to start from
     #[argh(option)]
@@ -67,7 +67,7 @@ struct FakeArgs {
 
     /// working directory for the build
     #[argh(option)]
-    dir: Option<PathBuf>,
+    dir: Option<Utf8PathBuf>,
 
     /// in run mode, keep the temporary directory
     #[argh(switch)]
@@ -103,10 +103,11 @@ fn to_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
 fn get_request(driver: &Driver, args: &FakeArgs) -> anyhow::Result<Request> {
     // The default working directory (if not specified) depends on the mode.
     let workdir = args.dir.clone().unwrap_or_else(|| {
-        PathBuf::from(match args.mode {
+        (match args.mode {
             Mode::Generate | Mode::Run => ".fake",
             _ => ".",
         })
+        .into()
     });
 
     Ok(Request {
