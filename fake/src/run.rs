@@ -110,6 +110,7 @@ impl<'a> Run<'a> {
         let keep = self.global_config.keep_build_dir;
         let ninja = self.global_config.ninja.clone();
         let stdout = self.plan.steps.last().unwrap().0 == self.driver.stdout_op;
+        let verbose = self.global_config.verbose;
 
         let stale_dir = dir.exists();
         self.emit_to_dir(dir)?;
@@ -117,8 +118,8 @@ impl<'a> Run<'a> {
         // Run `ninja` in the working directory.
         let mut cmd = Command::new(ninja);
         cmd.current_dir(dir);
-        if stdout {
-            // When we're printing to stdout, suppress Ninja's output.
+        if stdout && !verbose {
+            // When we're printing to stdout, suppress Ninja's output by default.
             cmd.arg("--quiet");
         }
         cmd.status()?;
