@@ -1,10 +1,4 @@
 use fake::{cli, Driver, DriverBuilder};
-use lazy_static_include::*;
-
-lazy_static_include_bytes! {
-    JSON_DAT => "data/json-dat.py",
-    TB_SV => "data/tb.sv",
-}
 
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::default();
@@ -52,14 +46,15 @@ fn build_driver() -> Driver {
     // Shared machinery for RTL simulators.
     let sim_setup = bld.setup("RTL simulation", |e| {
         // Data conversion to and from JSON.
-        e.add_file("json-dat.py", &JSON_DAT)?;
-        e.rule("hex-data", "python3 json-dat.py --from-json $in $out")?;
-        e.rule("json-data", "python3 json-dat.py --to-json $in $out")?;
+        e.var(
+            "json_dat",
+            &format!("python3 {}/json-dat.py", e.config_val("data")),
+        )?;
+        e.rule("hex-data", "$json_dat --from-json $in $out")?;
+        e.rule("json-data", "$json_dat --to-json $in $out")?;
 
         // The Verilog testbench.
-        // TODO I wish we could somehow refer to pre-existing files… would make "emit" mode nicer.
-        e.add_file("tb.sv", &TB_SV)?;
-        e.var("testbench", "tb.sv")?;
+        e.var("testbench", &format!("{}/tb.sv", e.config_val("data")))?;
 
         // The input data file. `sim.data` is required.
         let data_name = e.config_val("sim.data");
