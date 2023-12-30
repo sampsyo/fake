@@ -108,8 +108,6 @@ pub struct Driver {
     pub setups: PrimaryMap<SetupRef, Setup>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
-    pub(crate) stdin_op: OpRef,
-    pub(crate) stdout_op: OpRef,
 }
 
 impl Driver {
@@ -210,14 +208,9 @@ impl Driver {
         let mut steps: Vec<(OpRef, Utf8PathBuf)> = vec![];
 
         // Get the initial input filename and the stem to use to generate all intermediate filenames.
-        let start_file = match req.start_file {
-            Some(path) => relative_path(&path, &req.workdir),
-            None => {
-                // Use the special "stdin" operator to capture the input file.
-                let filename = self.gen_name("stdin", self.ops[path[0]].input);
-                steps.push((self.stdin_op, filename.clone()));
-                filename
-            }
+        let (stdin, start_file) = match req.start_file {
+            Some(path) => (false, relative_path(&path, &req.workdir)),
+            None => (true, "stdin".into()),
         };
         let stem = start_file.file_stem().unwrap();
 
@@ -227,15 +220,13 @@ impl Driver {
             (op, filename)
         }));
 
-        if let Some(end_file) = req.end_file {
-            // If we have a specified output filename, use that instead of the generated one.
+        // If we have a specified output filename, use that instead of the generated one.
+        let stdout = if let Some(end_file) = req.end_file {
             // TODO Can we just avoid generating the unused filename in the first place?
             let last_step = steps.last_mut().expect("no steps");
             last_step.1 = relative_path(&end_file, &req.workdir);
             false
         } else {
-            // Use the special "stdout" operator to show the output.
-            steps.push((self.stdout_op, Utf8PathBuf::from("_stdout")));
             true
         };
 
@@ -243,6 +234,8 @@ impl Driver {
             start: start_file,
             steps,
             workdir: req.workdir,
+            stdin,
+            stdout,
         })
     }
 
@@ -341,44 +334,11 @@ impl DriverBuilder {
         )
     }
 
-    /// Add our built-in operations for capturing stdin and printing to stdout.
-    fn builtin_ops(&mut self) -> (OpRef, OpRef) {
-        let null_state = self.state("null", &[]);
-
-        let stdin_setup = self.setup("stdin", |e| {
-            e.rule("capture", "cat > $out")?;
-            writeln!(e.out, "  pool = console")?;
-            Ok(())
-        });
-        let stdin = self.op(
-            "stdin",
-            &[stdin_setup],
-            null_state,
-            null_state,
-            |e, _, output| {
-                writeln!(e.out, "build {}: capture", output)?;
-                Ok(())
-            },
-        );
-
-        let stdout_setup = self.setup("stdout", |e| {
-            e.rule("show", "cat $in")?;
-            writeln!(e.out, "  pool = console")?;
-            Ok(())
-        });
-        let stdout = self.rule(&[stdout_setup], null_state, null_state, "show");
-
-        (stdin, stdout)
-    }
-
-    pub fn build(mut self) -> Driver {
-        let (stdin_op, stdout_op) = self.builtin_ops();
+    pub fn build(self) -> Driver {
         Driver {
             setups: self.setups,
             states: self.states,
             ops: self.ops,
-            stdin_op,
-            stdout_op,
         }
     }
 }
@@ -415,4 +375,10 @@ pub struct Plan {
 
     /// The directory that the build will happen in.
     pub workdir: Utf8PathBuf,
+
+    /// Read the first input from stdin.
+    pub stdin: bool,
+
+    /// Write the final output to stdout.
+    pub stdout: bool,
 }
