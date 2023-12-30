@@ -96,6 +96,12 @@ pub fn relative_path(path: &Utf8Path, base: &Utf8Path) -> Utf8PathBuf {
     }
 }
 
+#[derive(PartialEq)]
+enum Destination {
+    State(StateRef),
+    Op(OpRef),
+}
+
 /// A Driver encapsulates a set of States and the Operations that can transform between them. It
 /// contains all the machinery to perform builds in a given ecosystem.
 pub struct Driver {
@@ -107,7 +113,9 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn find_path(&self, start: StateRef, end: StateRef) -> Option<Vec<OpRef>> {
+    /// Find a chain of Operations from the `start` state to the `end`, which may be a state or the
+    /// final operation in the chain.
+    fn find_path_segment(&self, start: StateRef, end: Destination) -> Option<Vec<OpRef>> {
         // Our start state is the input.
         let mut visited = SecondaryMap::<StateRef, bool>::new();
         visited[start] = true;
@@ -120,8 +128,8 @@ impl Driver {
         while !state_queue.is_empty() {
             let cur_state = state_queue.remove(0);
 
-            // Finish when we reach the goal.
-            if cur_state == end {
+            // Finish when we reach the goal vertex.
+            if end == Destination::State(cur_state) {
                 break;
             }
 
@@ -132,12 +140,23 @@ impl Driver {
                     visited[op.output] = true;
                     breadcrumbs[op.output] = Some(op_ref);
                 }
+
+                // Finish when we reach the goal edge.
+                if end == Destination::Op(op_ref) {
+                    break;
+                }
             }
         }
 
         // Traverse the breadcrumbs backward to build up the path back from output to input.
         let mut op_path: Vec<OpRef> = vec![];
-        let mut cur_state = end;
+        let mut cur_state = match end {
+            Destination::State(state) => state,
+            Destination::Op(op) => {
+                op_path.push(op);
+                self.ops[op].input
+            }
+        };
         while cur_state != start {
             match breadcrumbs[cur_state] {
                 Some(op) => {
@@ -152,6 +171,31 @@ impl Driver {
         Some(op_path)
     }
 
+    /// Find a chain of operations from the `start` state to the `end` state, passing through each
+    /// `through` operation in order.
+    pub fn find_path(
+        &self,
+        start: StateRef,
+        end: StateRef,
+        through: &[OpRef],
+    ) -> Option<Vec<OpRef>> {
+        let mut cur_state = start;
+        let mut op_path: Vec<OpRef> = vec![];
+
+        // Build path segments through each through required operation.
+        for op in through {
+            let segment = self.find_path_segment(cur_state, Destination::Op(*op))?;
+            op_path.extend(segment);
+            cur_state = self.ops[*op].output;
+        }
+
+        // Build the final path segment to the destination state.
+        let segment = self.find_path_segment(cur_state, Destination::State(end))?;
+        op_path.extend(segment);
+
+        Some(op_path)
+    }
+
     /// Generate a filename with an extension appropriate for the given State.
     fn gen_name(&self, stem: &str, state: StateRef) -> Utf8PathBuf {
         // TODO avoid collisions in case we reuse extensions...
@@ -161,7 +205,7 @@ impl Driver {
 
     pub fn plan(&self, req: Request) -> Option<Plan> {
         // Find a path through the states.
-        let path = self.find_path(req.start_state, req.end_state)?;
+        let path = self.find_path(req.start_state, req.end_state, &req.through)?;
 
         let mut steps: Vec<(OpRef, Utf8PathBuf)> = vec![];
 
@@ -215,6 +259,13 @@ impl Driver {
             .iter()
             .find(|(_, state_data)| state_data.name == name)
             .map(|(state, _)| state)
+    }
+
+    pub fn get_op(&self, name: &str) -> Option<OpRef> {
+        self.ops
+            .iter()
+            .find(|(_, op_data)| op_data.name == name)
+            .map(|(op, _)| op)
     }
 }
 
@@ -346,6 +397,9 @@ pub struct Request {
 
     /// The filename to write the output to, or None to print to stdout.
     pub end_file: Option<Utf8PathBuf>,
+
+    /// A sequence of operators to route the conversion through.
+    pub through: Vec<OpRef>,
 
     /// The working directory for the build.
     pub workdir: Utf8PathBuf,

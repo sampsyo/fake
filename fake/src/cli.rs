@@ -76,6 +76,10 @@ struct FakeArgs {
     /// set a configuration variable (key=value)
     #[argh(option, short = 's')]
     set: Vec<String>,
+
+    /// route the conversion through a specific operation
+    #[argh(option)]
+    through: Vec<String>,
 }
 
 fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
@@ -114,11 +118,23 @@ fn get_request(driver: &Driver, args: &FakeArgs) -> anyhow::Result<Request> {
         .into()
     });
 
+    // Find all the operations to route through.
+    let through: Result<Vec<_>, _> = args
+        .through
+        .iter()
+        .map(|s| {
+            driver
+                .get_op(s)
+                .ok_or(anyhow!("unknown --through op {}", s))
+        })
+        .collect();
+
     Ok(Request {
         start_file: args.input.clone(),
         start_state: from_state(driver, args)?,
         end_file: args.output.clone(),
         end_state: to_state(driver, args)?,
+        through: through?,
         workdir,
     })
 }
