@@ -51,7 +51,7 @@ fn build_driver() -> Driver {
             &format!("python3 {}/json-dat.py", e.config_val("data")),
         )?;
         e.rule("hex-data", "$json_dat --from-json $in $out")?;
-        e.rule("json-data", "$json_dat --to-json $in $out")?;
+        e.rule("json-data", "$json_dat --to-json $out $in")?;
 
         // The Verilog testbench.
         e.var("testbench", &format!("{}/tb.sv", e.config_val("data")))?;
@@ -74,11 +74,10 @@ fn build_driver() -> Driver {
     // Icarus Verilog.
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
         e.var("iverilog", "iverilog")?;
-        e.var("datadir", "data")?;
         e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
         e.rule(
             "icarus-sim",
-            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1",
+            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1 > $out",
         )?;
         Ok(())
     });
@@ -91,11 +90,11 @@ fn build_driver() -> Driver {
             let bin_name = "icarus_bin";
             e.build("icarus-compile", input, bin_name)?;
 
-            e.build_cmd("_sim", "icarus-sim", &[bin_name, "$datadir"], &[])?;
+            e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
 
             // TODO move
-            e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
+            e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
 
             Ok(())
         },
@@ -124,11 +123,11 @@ fn build_driver() -> Driver {
             let out_dir = "verilator-out";
             e.build("verilator-compile", input, out_dir)?;
 
-            e.build_cmd("_sim", "verilator-sim", &[out_dir, "$datadir"], &[])?;
+            e.build_cmd("sim.log", "verilator-sim", &[out_dir, "$datadir"], &[])?;
             e.arg("bin", &format!("{}/VTOP", out_dir))?;
 
             // TODO move
-            e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
+            e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
 
             Ok(())
         },

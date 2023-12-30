@@ -8,6 +8,7 @@ from fud.stages.verilator.json_to_dat import convert2dat, convert2json
 import simplejson
 import sys
 import os
+import re
 
 
 def json2dat(in_file, out_dir):
@@ -22,11 +23,26 @@ def json2dat(in_file, out_dir):
         )
 
 
-def dat2json(in_dir, out_file):
+def dat2json(out_file, in_dir, sim_log=None):
     mem = convert2json(in_dir, "out")
-    # TODO include cycles???
+
+    if sim_log:
+        cycles = 0
+        with open(sim_log) as f:
+            for line in f:
+                match = re.search(r"Simulated\s+((-)?\d+) cycles", line)
+                if match:
+                    cycles = int(match.group(1))
+                    break
+        out = {
+            "cycles": cycles,
+            "memories": mem,
+        }
+    else:
+        out = mem
+
     with open(out_file, 'w') as f:
-        simplejson.dump(mem, f, indent=2, sort_keys=True, use_decimal=True)
+        simplejson.dump(out, f, indent=2, sort_keys=True, use_decimal=True)
 
 
 if __name__ == '__main__':
