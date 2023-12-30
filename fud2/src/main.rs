@@ -46,9 +46,10 @@ fn build_driver() -> Driver {
     // Shared machinery for RTL simulators.
     let sim_setup = bld.setup("RTL simulation", |e| {
         // Data conversion to and from JSON.
+        e.config_var_or("python", "python", "python3")?;
         e.var(
             "json_dat",
-            &format!("python3 {}/json-dat.py", e.config_val("data")),
+            &format!("$python {}/json-dat.py", e.config_val("data")),
         )?;
         e.rule("hex-data", "$json_dat --from-json $in $out")?;
         e.rule("json-data", "$json_dat --to-json $out $in")?;
