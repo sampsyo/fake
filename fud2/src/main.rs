@@ -61,6 +61,10 @@ fn build_driver() -> Driver {
         let data_path = e.external_path(data_name.as_ref());
         e.var("sim_data", data_path.as_str())?;
 
+        // Convert the input data to hex files.
+        e.var("datadir", "sim_data")?;
+        e.build("hex-data", "$sim_data", "$datadir")?;
+
         // More shared configuration.
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
 
@@ -86,10 +90,11 @@ fn build_driver() -> Driver {
         |e, input, output| {
             let bin_name = "icarus_bin";
             e.build("icarus-compile", input, bin_name)?;
-            e.build("hex-data", "$sim_data", "$datadir")?;
 
             e.build_cmd("_sim", "icarus-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
+
+            // TODO move
             e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
 
             Ok(())
@@ -99,7 +104,6 @@ fn build_driver() -> Driver {
     // Verilator.
     let verilator_setup = bld.setup("Verilator", |e| {
         e.var("verilator", "verilator")?;
-        e.var("datadir", "data")?;
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
         e.rule(
             "verilator-compile",
@@ -117,13 +121,13 @@ fn build_driver() -> Driver {
         verilog,
         dat,
         |e, input, output| {
-            // TODO share as much as possible with Icarus...
             let out_dir = "verilator-out";
             e.build("verilator-compile", input, out_dir)?;
-            e.build("hex-data", "$sim_data", "$datadir")?;
 
             e.build_cmd("_sim", "verilator-sim", &[out_dir, "$datadir"], &[])?;
             e.arg("bin", &format!("{}/VTOP", out_dir))?;
+
+            // TODO move
             e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
 
             Ok(())
