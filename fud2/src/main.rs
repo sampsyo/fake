@@ -108,7 +108,7 @@ fn build_driver() -> Driver {
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
         e.rule(
             "verilator-compile",
-            "$verilator --trace $in $testbench --binary --top-module TOP -fno-inline",
+            "$verilator $in $testbench --trace --binary --top-module TOP -fno-inline -Mdir $out",
         )?;
         e.rule(
             "verilator-sim",
@@ -123,12 +123,12 @@ fn build_driver() -> Driver {
         dat,
         |e, input, output| {
             // TODO share as much as possible with Icarus...
-            let bin_name = "verilator_bin";
-            e.build("verilator-compile", input, bin_name)?;
+            let out_dir = "verilator-out";
+            e.build("verilator-compile", input, out_dir)?;
             e.build("hex-data", "$sim_data", "$datadir")?;
 
-            e.build_cmd("_sim", "verilator-sim", &[bin_name, "$datadir"], &[])?;
-            e.arg("bin", bin_name)?;
+            e.build_cmd("_sim", "verilator-sim", &[out_dir, "$datadir"], &[])?;
+            e.arg("bin", &format!("{}/VTOP", out_dir))?;
             e.build_cmd(output, "json-data", &["$datadir"], &["_sim"])?;
 
             Ok(())
