@@ -12,6 +12,9 @@ pub struct GlobalConfig {
 
     /// Never delete the temporary directory used to execute ninja in `run` mode.
     pub keep_build_dir: bool,
+
+    /// Enable verbose output.
+    pub verbose: bool,
 }
 
 impl Default for GlobalConfig {
@@ -19,6 +22,7 @@ impl Default for GlobalConfig {
         Self {
             ninja: "ninja".to_string(),
             keep_build_dir: false,
+            verbose: false,
         }
     }
 }

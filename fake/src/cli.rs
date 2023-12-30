@@ -80,6 +80,10 @@ struct FakeArgs {
     /// route the conversion through a specific operation
     #[argh(option)]
     through: Vec<String>,
+
+    /// verbose ouput
+    #[argh(switch, short = 'v')]
+    verbose: Option<bool>,
 }
 
 fn from_state(driver: &Driver, args: &FakeArgs) -> anyhow::Result<StateRef> {
@@ -150,9 +154,12 @@ pub fn cli(driver: &Driver) -> anyhow::Result<()> {
     // Configure.
     let mut run = Run::new(driver, plan);
 
-    // The `--keep` argument overrides the global `keep` config option.
+    // Override some global config options.
     if let Some(keep) = args.keep {
         run.global_config.keep_build_dir = keep;
+    }
+    if let Some(verbose) = args.verbose {
+        run.global_config.verbose = verbose;
     }
 
     // Use `--set` arguments to override configuration values.

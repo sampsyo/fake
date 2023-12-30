@@ -132,7 +132,8 @@ impl<'a> Run<'a> {
     }
 
     fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
-        let mut emitter = Emitter::new(out, self.config_data, self.plan.workdir);
+        let mut emitter =
+            Emitter::new(out, self.config_data, self.global_config, self.plan.workdir);
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
@@ -167,15 +168,22 @@ impl<'a> Run<'a> {
 
 pub struct Emitter {
     pub out: Box<dyn Write>,
-    pub config: figment::Figment,
+    pub config_data: figment::Figment,
+    pub global_config: config::GlobalConfig,
     pub workdir: Utf8PathBuf,
 }
 
 impl Emitter {
-    fn new<T: Write + 'static>(out: T, config: figment::Figment, workdir: Utf8PathBuf) -> Self {
+    fn new<T: Write + 'static>(
+        out: T,
+        config_data: figment::Figment,
+        global_config: config::GlobalConfig,
+        workdir: Utf8PathBuf,
+    ) -> Self {
         Self {
             out: Box::new(out),
-            config,
+            config_data,
+            global_config,
             workdir,
         }
     }
@@ -183,14 +191,14 @@ impl Emitter {
     /// Fetch a configuration value, or panic if it's missing.
     pub fn config_val(&self, key: &str) -> String {
         // TODO better error reporting here
-        self.config
+        self.config_data
             .extract_inner::<String>(key)
             .expect("missing config key")
     }
 
     /// Fetch a configuration value, using a default if it's missing.
     pub fn config_or(&self, key: &str, default: &str) -> String {
-        self.config
+        self.config_data
             .extract_inner::<String>(key)
             .unwrap_or_else(|_| default.into())
     }
