@@ -111,7 +111,7 @@ fn build_driver() -> Driver {
         )?;
         e.rule(
             "verilator-sim",
-            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1",
+            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1 > $out",
         )?;
         Ok(())
     });
