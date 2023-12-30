@@ -62,7 +62,7 @@ fn build_driver() -> Driver {
         let data_path = e.external_path(data_name.as_ref());
         e.var("sim_data", data_path.as_str())?;
 
-        // Convert the input data to hex files.
+        // Produce the data directory.
         e.var("datadir", "sim_data")?;
         e.build("hex-data", "$sim_data", "$datadir")?;
 
@@ -93,8 +93,6 @@ fn build_driver() -> Driver {
 
             e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
-
-            // TODO move
             e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
 
             Ok(())
@@ -126,8 +124,6 @@ fn build_driver() -> Driver {
 
             e.build_cmd("sim.log", "verilator-sim", &[out_dir, "$datadir"], &[])?;
             e.arg("bin", &format!("{}/VTOP", out_dir))?;
-
-            // TODO move
             e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
 
             Ok(())
