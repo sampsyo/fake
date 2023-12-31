@@ -211,8 +211,7 @@ impl<'a> Run<'a> {
     }
 
     fn emit<T: Write + 'static>(self, out: T) -> EmitResult {
-        let mut emitter =
-            Emitter::new(out, self.config_data, self.global_config, self.plan.workdir);
+        let mut emitter = Emitter::new(out, self.config_data, self.plan.workdir);
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
@@ -248,7 +247,6 @@ impl<'a> Run<'a> {
 pub struct Emitter {
     pub out: Box<dyn Write>,
     pub config_data: figment::Figment,
-    pub global_config: config::GlobalConfig,
     pub workdir: Utf8PathBuf,
 }
 
@@ -256,13 +254,11 @@ impl Emitter {
     fn new<T: Write + 'static>(
         out: T,
         config_data: figment::Figment,
-        global_config: config::GlobalConfig,
         workdir: Utf8PathBuf,
     ) -> Self {
         Self {
             out: Box::new(out),
             config_data,
-            global_config,
             workdir,
         }
     }
