@@ -15,14 +15,22 @@ fn build_driver() -> Driver {
         e.config_var("calyx_base", "calyx.base")?;
         e.config_var_or("calyx_exe", "calyx.exe", "$calyx_base/target/debug/calyx")?;
         e.rule(
-            "calyx-to-verilog",
-            "$calyx_exe -l $calyx_base -b verilog --disable-verify $in > $out",
+            "calyx",
+            "$calyx_exe -l $calyx_base -b $backend --disable-verify $in > $out",
         )?;
-        e.rule("calyx-to-calyx", "$calyx_exe -l $calyx_base $in -o $out")?;
         Ok(())
     });
-    bld.rule(&[calyx_setup], calyx, verilog, "calyx-to-verilog");
-    bld.rule(&[calyx_setup], calyx, calyx, "calyx-to-calyx");
+    bld.op(
+        "calyx",
+        &[calyx_setup],
+        calyx,
+        verilog,
+        |e, input, output| {
+            e.build_cmd(output, "calyx", &[input], &[])?;
+            e.arg("backend", "verilog")?;
+            Ok(())
+        },
+    );
 
     // Dahlia.
     let dahlia_setup = bld.setup("Dahlia compiler", |e| {
@@ -126,6 +134,59 @@ fn build_driver() -> Driver {
             e.arg("bin", &format!("{}/VTOP", out_dir))?;
             e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
 
+            Ok(())
+        },
+    );
+
+    // Xilinx.
+    let xo = bld.state("xo", &["xo"]);
+    let xclbin = bld.state("xclbin", &["xclbin"]);
+    let xilinx_wrapper = bld.state("xilinx-wrapper", &["sv"]);
+    let xilinx_xml = bld.state("xilinx-xml", &["xml"]);
+    let xilinx_setup = bld.setup("Xilinx tools", |e| {
+        // Locations for Vivado and Vitis installations.
+        e.config_var("vivado_dir", "xilinx.vivado")?;
+        e.config_var("vitis_dir", "xilinx.vitis")?;
+
+        // Package a Verilog program as an `.xo` file.
+        let rsrc_dir = e.config_val("data");
+        e.var("gen_xo_tcl", &format!("{}/gen_xo.tcl", rsrc_dir))?;
+        e.rule("gen-xo", "$vivado_dir/bin/vivado -mode batch -source $gen_xo_tcl -tclargs $out TK_PORT_NAMES")?;
+
+        // Compile an `.xo` file to an `.xclbin` file, which is where the actual EDA work occurs.
+        e.config_var_or("xilinx_mode", "xilinx.mode", "hw_emu")?;
+        e.config_var_or("platform", "xilinx.device", "xilinx_u50_gen3x16_xdma_201920_3")?;
+        e.rule("compile-xclbin", "$vitis_dir/bin/v++ -g -t $xilinx_mode --platform $platform --save-temps --profile.data all:all:all --profile.exec all:all:all -lo $out $in")?;
+
+        Ok(())
+    });
+    bld.op("xo", &[xilinx_setup], verilog, xo, |e, input, output| {
+        e.build_cmd(output, "gen-xo", &[], &[input])?;
+        Ok(())
+    });
+    bld.op("xclbin", &[xilinx_setup], xo, xclbin, |e, input, output| {
+        e.build_cmd(output, "compile-xclbin", &[input], &[])?;
+        Ok(())
+    });
+    bld.op(
+        "xilinx-wrapper",
+        &[xilinx_setup],
+        calyx,
+        xilinx_wrapper,
+        |e, input, output| {
+            e.build_cmd(output, "calyx", &[input], &[])?;
+            e.arg("backend", "xilinx")?;
+            Ok(())
+        },
+    );
+    bld.op(
+        "xilinx-xml",
+        &[xilinx_setup],
+        calyx,
+        xilinx_xml,
+        |e, input, output| {
+            e.build_cmd(output, "calyx", &[input], &[])?;
+            e.arg("backend", "xilinx-xml")?;
             Ok(())
         },
     );
