@@ -141,8 +141,6 @@ fn build_driver() -> Driver {
     // Xilinx.
     let xo = bld.state("xo", &["xo"]);
     let xclbin = bld.state("xclbin", &["xclbin"]);
-    let xilinx_wrapper = bld.state("xilinx-wrapper", &["sv"]);
-    let xilinx_xml = bld.state("xilinx-xml", &["xml"]);
     let xilinx_setup = bld.setup("Xilinx tools", |e| {
         // Locations for Vivado and Vitis installations.
         e.config_var("vivado_dir", "xilinx.vivado")?;
@@ -161,35 +159,20 @@ fn build_driver() -> Driver {
         Ok(())
     });
     bld.op("xo", &[xilinx_setup], verilog, xo, |e, input, output| {
-        e.build_cmd(output, "gen-xo", &[], &[input])?;
+        // Extra ingredients for the `.xo` package.
+        e.build_cmd("toplevel.v", "calyx", &[input], &[])?;
+        e.arg("backend", "xilinx")?;
+        e.build_cmd("kernel.xml", "calyx", &[input], &[])?;
+        e.arg("backend", "xilinx-xml")?;
+
+        // Package the `.xo` itelf.
+        e.build_cmd(output, "gen-xo", &[], &[input, "toplevel.v", "kernel.xml"])?;
         Ok(())
     });
     bld.op("xclbin", &[xilinx_setup], xo, xclbin, |e, input, output| {
         e.build_cmd(output, "compile-xclbin", &[input], &[])?;
         Ok(())
     });
-    bld.op(
-        "xilinx-wrapper",
-        &[xilinx_setup],
-        calyx,
-        xilinx_wrapper,
-        |e, input, output| {
-            e.build_cmd(output, "calyx", &[input], &[])?;
-            e.arg("backend", "xilinx")?;
-            Ok(())
-        },
-    );
-    bld.op(
-        "xilinx-xml",
-        &[xilinx_setup],
-        calyx,
-        xilinx_xml,
-        |e, input, output| {
-            e.build_cmd(output, "calyx", &[input], &[])?;
-            e.arg("backend", "xilinx-xml")?;
-            Ok(())
-        },
-    );
 
     bld.build()
 }
