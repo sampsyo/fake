@@ -60,9 +60,8 @@ struct FakeArgs {
     #[argh(option)]
     to: Option<String>,
 
-    // TODO should be separate options for convenience...
-    /// execution mode (plan, emit, gen, run)
-    #[argh(option, default = "Mode::EmitNinja")]
+    /// execution mode (run, plan, emit, gen, dot)
+    #[argh(option, short = 'm', default = "Mode::Run")]
     mode: Mode,
 
     /// working directory for the build
