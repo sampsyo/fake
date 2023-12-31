@@ -3,13 +3,9 @@ use fake::{cli, Driver, DriverBuilder};
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::new("fud2");
 
-    let dahlia = bld.state("dahlia", &["fuse"]);
-    let mrxl = bld.state("mrxl", &["mrxl"]);
+    // Calyx.
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv", "v"]);
-    let dat = bld.state("dat", &["json"]);
-
-    // Calyx.
     // TODO: Currently hard-coding `--disable-verify`; this is only necessary for Icraus.
     let calyx_setup = bld.setup("Calyx compiler", |e| {
         e.config_var("calyx_base", "calyx.base")?;
@@ -33,6 +29,7 @@ fn build_driver() -> Driver {
     );
 
     // Dahlia.
+    let dahlia = bld.state("dahlia", &["fuse"]);
     let dahlia_setup = bld.setup("Dahlia compiler", |e| {
         e.var("dahlia_exec", "/Users/asampson/cu/research/dahlia/fuse")?;
         e.rule(
@@ -44,6 +41,7 @@ fn build_driver() -> Driver {
     bld.rule(&[dahlia_setup], dahlia, calyx, "dahlia-to-calyx");
 
     // MrXL.
+    let mrxl = bld.state("mrxl", &["mrxl"]);
     let mrxl_setup = bld.setup("MrXL compiler", |e| {
         e.var("mrxl_exec", "mrxl")?;
         e.rule("mrxl-to-calyx", "$mrxl_exec $in > $out")?;
@@ -52,6 +50,7 @@ fn build_driver() -> Driver {
     bld.rule(&[mrxl_setup], mrxl, calyx, "mrxl-to-calyx");
 
     // Shared machinery for RTL simulators.
+    let dat = bld.state("dat", &["json"]);
     let sim_setup = bld.setup("RTL simulation", |e| {
         // Data conversion to and from JSON.
         e.config_var_or("python", "python", "python3")?;
