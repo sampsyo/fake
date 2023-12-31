@@ -218,7 +218,7 @@ fn build_driver() -> Driver {
         xclbin,
         dat,
         |e, input, output| {
-            e.build_cmd(output, "xclrun", &[input, "$sim.data"], &["emconfig.json"])?;
+            e.build_cmd(output, "xclrun", &[input, "$sim_data"], &["emconfig.json"])?;
             Ok(())
         },
     );
