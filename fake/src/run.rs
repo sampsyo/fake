@@ -97,24 +97,45 @@ impl<'a> Run<'a> {
 
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
     pub fn emit_and_run(self, dir: &Utf8Path) -> Result<(), std::io::Error> {
-        // TODO: This workaround for lifetime stuff in the config isn't great.
+        // TODO: This workaround for lifetime stuff in the config isn't great!!
         let keep = self.global_config.keep_build_dir;
         let ninja = self.global_config.ninja.clone();
         let verbose = self.global_config.verbose;
+        let start = self.plan.workdir.join(self.plan.start.clone());
+        let end = self.plan.workdir.join(self.plan.end());
+        let stdin = self.plan.stdin;
         let stdout = self.plan.stdout;
 
+        // Emit the Ninja file.
         let stale_dir = dir.exists();
         self.emit_to_dir(dir)?;
+
+        // Capture stdin.
+        if stdin {
+            let stdin_file = std::fs::File::create(start)?;
+            std::io::copy(
+                &mut std::io::stdin(),
+                &mut std::io::BufWriter::new(stdin_file),
+            )?;
+        }
 
         // Run `ninja` in the working directory.
         let mut cmd = Command::new(ninja);
         cmd.current_dir(dir);
         if stdout && !verbose {
             // When we're printing to stdout, suppress Ninja's output by default.
-            // TODO instead, redirect output to /dev/null
-            cmd.arg("--quiet");
+            cmd.stdout(std::process::Stdio::null());
         }
         cmd.status()?;
+
+        // Emit stdout.
+        if stdout {
+            let stdout_file = std::fs::File::open(end)?;
+            std::io::copy(
+                &mut std::io::BufReader::new(stdout_file),
+                &mut std::io::stdout(),
+            )?;
+        }
 
         // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
         if !keep && !stale_dir {

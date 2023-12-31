@@ -382,3 +382,12 @@ pub struct Plan {
     /// Write the final output to stdout.
     pub stdout: bool,
 }
+
+impl Plan {
+    pub fn end(&self) -> &Utf8Path {
+        match self.steps.last() {
+            Some((_, path)) => path,
+            None => &self.start,
+        }
+    }
+}
