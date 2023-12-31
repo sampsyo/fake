@@ -208,7 +208,8 @@ fn build_driver() -> Driver {
 
         // Execute via the `xclrun` tool.
         e.config_var("xrt_dir", "xilinx.xrt")?;
-        e.rule("xclrun", "source $vitis_dir/settings64.sh ; source $xrt_dir/setup.sh ; XRT_INI_PATH=$xrt_ini EMCONFIG_PATH=. XCL_EMULATION_MODE=$xilinx_mode $python -m fud.xclrun --out $out $in")?;
+        e.rule("xclrun", "bash -c 'source $vitis_dir/settings64.sh ; source $xrt_dir/setup.sh ; XRT_INI_PATH=$xrt_ini EMCONFIG_PATH=. XCL_EMULATION_MODE=$xilinx_mode $python -m fud.xclrun --out $out $in'")?;
+        e.arg("pool", "console")?;
 
         Ok(())
     });
