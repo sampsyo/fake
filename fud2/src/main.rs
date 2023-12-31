@@ -138,7 +138,7 @@ fn build_driver() -> Driver {
         },
     );
 
-    // Xilinx.
+    // Xilinx compilation.
     let xo = bld.state("xo", &["xo"]);
     let xclbin = bld.state("xclbin", &["xclbin"]);
     let xilinx_setup = bld.setup("Xilinx tools", |e| {
@@ -193,6 +193,35 @@ fn build_driver() -> Driver {
         e.build_cmd(output, "compile-xclbin", &[input], &[])?;
         Ok(())
     });
+
+    // Xilinx execution.
+    // TODO Only does `hw_emu` for now...
+    let xrt_setup = bld.setup("Xilinx execution via XRT", |e| {
+        // Generate `emconfig.json`.
+        e.rule("emconfig", "$vitis_dir/bin/emconfigutil --platform $platform")?;
+        e.build_cmd("emconfig.json", "emconfig", &[], &[])?;
+
+        // A path to our stock `xrt.ini`.
+        // TODO: This is where would set up for VCD generation (by generating a new `xrt.ini`).
+        let rsrc_dir = e.config_val("data");
+        e.var("xrt_ini", &format!("{}/xrt.ini", rsrc_dir))?;
+
+        // Execute via the `xclrun` tool.
+        e.config_var("xrt_dir", "xilinx.xrt")?;
+        e.rule("xclrun", "source $vitis_dir/settings64.sh ; source $xrt_dir/setup.sh ; XRT_INI_PATH=$xrt_ini EMCONFIG_PATH=. XCL_EMULATION_MODE=$xilinx_mode $python -m fud.xclrun --out $out $in")?;
+
+        Ok(())
+    });
+    bld.op(
+        "xrt",
+        &[xilinx_setup, sim_setup, xrt_setup],
+        xclbin,
+        dat,
+        |e, input, output| {
+            e.build_cmd(output, "xclrun", &[input, "$sim.data"], &["emconfig.json"])?;
+            Ok(())
+        },
+    );
 
     bld.build()
 }
