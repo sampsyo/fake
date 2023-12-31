@@ -149,7 +149,9 @@ fn build_driver() -> Driver {
         // Package a Verilog program as an `.xo` file.
         let rsrc_dir = e.config_val("data");
         e.var("gen_xo_tcl", &format!("{}/gen_xo.tcl", rsrc_dir))?;
-        e.rule("gen-xo", "$vivado_dir/bin/vivado -mode batch -source $gen_xo_tcl -tclargs $out TK_PORT_NAMES")?;
+        e.var("get_ports", &format!("{}/get-ports.py", rsrc_dir))?;
+        e.config_var_or("python", "python", "python3")?;
+        e.rule("gen-xo", "$vivado_dir/bin/vivado -mode batch -source $gen_xo_tcl -tclargs $out `$python $get_ports kernel.xml`")?;
 
         // Compile an `.xo` file to an `.xclbin` file, which is where the actual EDA work occurs.
         e.config_var_or("xilinx_mode", "xilinx.mode", "hw_emu")?;
@@ -175,7 +177,7 @@ fn build_driver() -> Driver {
             e.build_cmd("kernel.xml", "calyx", &[input], &[])?;
             e.arg("backend", "xilinx-xml")?;
 
-            // Package the `.xo` itelf.
+            // Package the `.xo`.
             e.build_cmd(
                 output,
                 "gen-xo",
