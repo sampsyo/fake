@@ -1,4 +1,4 @@
-use crate::run::Emitter;
+use crate::run;
 use camino::{Utf8Path, Utf8PathBuf};
 use cranelift_entity::{entity_impl, PrimaryMap, SecondaryMap};
 use pathdiff::diff_utf8_paths;
@@ -20,7 +20,7 @@ pub struct Operation {
     pub input: StateRef,
     pub output: StateRef,
     pub setups: Vec<SetupRef>,
-    pub emit: Box<dyn EmitBuild>,
+    pub emit: Box<dyn run::EmitBuild>,
 }
 
 /// A reference to an Operation.
@@ -31,7 +31,7 @@ entity_impl!(OpRef, "op");
 /// A Setup runs at configuration time and produces Ninja machinery for Operations.
 pub struct Setup {
     pub name: String,
-    pub emit: Box<dyn EmitSetup>,
+    pub emit: Box<dyn run::EmitSetup>,
 }
 
 /// A reference to a Setup.
@@ -43,71 +43,6 @@ impl State {
     /// Check whether a filename extension indicates this state.
     fn ext_matches(&self, ext: &str) -> bool {
         self.extensions.iter().any(|e| e == ext)
-    }
-}
-
-/// An error that arises while emitting the Ninja file.
-#[derive(Debug)]
-pub enum EmitError {
-    Io(std::io::Error),
-    MissingConfig(String),
-}
-
-impl From<std::io::Error> for EmitError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
-    }
-}
-
-impl std::fmt::Display for EmitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self {
-            EmitError::Io(e) => write!(f, "{}", e),
-            EmitError::MissingConfig(s) => write!(f, "missing required config key: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for EmitError {}
-
-pub type EmitResult = std::result::Result<(), EmitError>;
-
-/// Code to emit a Ninja `build` command.
-pub trait EmitBuild {
-    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult;
-}
-
-type EmitBuildFn = fn(&mut Emitter, &str, &str) -> EmitResult;
-
-impl EmitBuild for EmitBuildFn {
-    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult {
-        self(emitter, input, output)
-    }
-}
-
-// TODO make this unnecessary...
-/// A simple `build` emitter that just runs a Ninja rule.
-pub struct EmitRuleBuild {
-    pub rule_name: String,
-}
-
-impl EmitBuild for EmitRuleBuild {
-    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult {
-        emitter.build(&self.rule_name, input, output)?;
-        Ok(())
-    }
-}
-
-/// Code to emit Ninja code at the setup stage.
-pub trait EmitSetup {
-    fn setup(&self, emitter: &mut Emitter) -> EmitResult;
-}
-
-type EmitSetupFn = fn(&mut Emitter) -> EmitResult;
-
-impl EmitSetup for EmitSetupFn {
-    fn setup(&self, emitter: &mut Emitter) -> EmitResult {
-        self(emitter)
     }
 }
 
@@ -319,7 +254,7 @@ impl DriverBuilder {
         })
     }
 
-    fn add_op<T: EmitBuild + 'static>(
+    fn add_op<T: run::EmitBuild + 'static>(
         &mut self,
         name: &str,
         setups: &[SetupRef],
@@ -336,14 +271,14 @@ impl DriverBuilder {
         })
     }
 
-    pub fn add_setup<T: EmitSetup + 'static>(&mut self, name: &str, emit: T) -> SetupRef {
+    pub fn add_setup<T: run::EmitSetup + 'static>(&mut self, name: &str, emit: T) -> SetupRef {
         self.setups.push(Setup {
             name: name.into(),
             emit: Box::new(emit),
         })
     }
 
-    pub fn setup(&mut self, name: &str, func: EmitSetupFn) -> SetupRef {
+    pub fn setup(&mut self, name: &str, func: run::EmitSetupFn) -> SetupRef {
         self.add_setup(name, func)
     }
 
@@ -353,7 +288,7 @@ impl DriverBuilder {
         setups: &[SetupRef],
         input: StateRef,
         output: StateRef,
-        build: EmitBuildFn,
+        build: run::EmitBuildFn,
     ) -> OpRef {
         self.add_op(name, setups, input, output, build)
     }
@@ -370,7 +305,7 @@ impl DriverBuilder {
             setups,
             input,
             output,
-            EmitRuleBuild {
+            run::EmitRuleBuild {
                 rule_name: rule_name.to_string(),
             },
         )

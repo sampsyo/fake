@@ -1,11 +1,74 @@
 use crate::config;
-use crate::driver::{
-    relative_path, Driver, EmitError, EmitResult, OpRef, Plan, SetupRef, StateRef,
-};
+use crate::driver::{relative_path, Driver, OpRef, Plan, SetupRef, StateRef};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::process::Command;
+
+/// An error that arises while emitting the Ninja file.
+#[derive(Debug)]
+pub enum EmitError {
+    Io(std::io::Error),
+    MissingConfig(String),
+}
+
+impl From<std::io::Error> for EmitError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl std::fmt::Display for EmitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            EmitError::Io(e) => write!(f, "{}", e),
+            EmitError::MissingConfig(s) => write!(f, "missing required config key: {}", s),
+        }
+    }
+}
+
+impl std::error::Error for EmitError {}
+
+pub type EmitResult = std::result::Result<(), EmitError>;
+
+/// Code to emit a Ninja `build` command.
+pub trait EmitBuild {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult;
+}
+
+pub type EmitBuildFn = fn(&mut Emitter, &str, &str) -> EmitResult;
+
+impl EmitBuild for EmitBuildFn {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult {
+        self(emitter, input, output)
+    }
+}
+
+// TODO make this unnecessary...
+/// A simple `build` emitter that just runs a Ninja rule.
+pub struct EmitRuleBuild {
+    pub rule_name: String,
+}
+
+impl EmitBuild for EmitRuleBuild {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult {
+        emitter.build(&self.rule_name, input, output)?;
+        Ok(())
+    }
+}
+
+/// Code to emit Ninja code at the setup stage.
+pub trait EmitSetup {
+    fn setup(&self, emitter: &mut Emitter) -> EmitResult;
+}
+
+pub type EmitSetupFn = fn(&mut Emitter) -> EmitResult;
+
+impl EmitSetup for EmitSetupFn {
+    fn setup(&self, emitter: &mut Emitter) -> EmitResult {
+        self(emitter)
+    }
+}
 
 pub struct Run<'a> {
     pub driver: &'a Driver,
