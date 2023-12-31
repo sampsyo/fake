@@ -1,5 +1,7 @@
 use crate::config;
-use crate::driver::{relative_path, Driver, OpRef, Plan, SetupRef, StateRef};
+use crate::driver::{
+    relative_path, Driver, EmitError, EmitResult, OpRef, Plan, SetupRef, StateRef,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -82,12 +84,12 @@ impl<'a> Run<'a> {
     }
 
     /// Print the `build.ninja` file to stdout.
-    pub fn emit_to_stdout(self) -> Result<(), std::io::Error> {
+    pub fn emit_to_stdout(self) -> EmitResult {
         self.emit(std::io::stdout())
     }
 
     /// Ensure that a directory exists and write `build.ninja` inside it.
-    pub fn emit_to_dir(self, dir: &Utf8Path) -> Result<(), std::io::Error> {
+    pub fn emit_to_dir(self, dir: &Utf8Path) -> EmitResult {
         std::fs::create_dir_all(dir)?;
         let ninja_path = dir.join("build.ninja");
         let ninja_file = std::fs::File::create(ninja_path)?;
@@ -96,7 +98,7 @@ impl<'a> Run<'a> {
     }
 
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
-    pub fn emit_and_run(self, dir: &Utf8Path) -> Result<(), std::io::Error> {
+    pub fn emit_and_run(self, dir: &Utf8Path) -> EmitResult {
         // TODO: This workaround for lifetime stuff in the config isn't great!!
         let keep = self.global_config.keep_build_dir;
         let ninja = self.global_config.ninja.clone();
@@ -145,7 +147,7 @@ impl<'a> Run<'a> {
         Ok(())
     }
 
-    fn emit<T: Write + 'static>(self, out: T) -> Result<(), std::io::Error> {
+    fn emit<T: Write + 'static>(self, out: T) -> EmitResult {
         let mut emitter =
             Emitter::new(out, self.config_data, self.global_config, self.plan.workdir);
 
@@ -203,11 +205,10 @@ impl Emitter {
     }
 
     /// Fetch a configuration value, or panic if it's missing.
-    pub fn config_val(&self, key: &str) -> String {
-        // TODO better error reporting here
+    pub fn config_val(&self, key: &str) -> Result<String, EmitError> {
         self.config_data
             .extract_inner::<String>(key)
-            .expect("missing config key")
+            .map_err(|_| EmitError::MissingConfig(key.to_string()))
     }
 
     /// Fetch a configuration value, using a default if it's missing.
@@ -218,8 +219,9 @@ impl Emitter {
     }
 
     /// Emit a Ninja variable declaration for `name` based on the configured value for `key`.
-    pub fn config_var(&mut self, name: &str, key: &str) -> std::io::Result<()> {
-        self.var(name, &self.config_val(key))
+    pub fn config_var(&mut self, name: &str, key: &str) -> EmitResult {
+        self.var(name, &self.config_val(key)?)?;
+        Ok(())
     }
 
     /// Emit a Ninja variable declaration for `name` based on the configured value for `key`, or a
@@ -230,15 +232,13 @@ impl Emitter {
 
     /// Emit a Ninja variable declaration.
     pub fn var(&mut self, name: &str, value: &str) -> std::io::Result<()> {
-        writeln!(self.out, "{} = {}", name, value)?;
-        Ok(())
+        writeln!(self.out, "{} = {}", name, value)
     }
 
     /// Emit a Ninja rule definition.
     pub fn rule(&mut self, name: &str, command: &str) -> std::io::Result<()> {
         writeln!(self.out, "rule {}", name)?;
-        writeln!(self.out, "  command = {}", command)?;
-        Ok(())
+        writeln!(self.out, "  command = {}", command)
     }
 
     /// Emit a simple Ninja build command with one dependency.

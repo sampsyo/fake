@@ -57,16 +57,16 @@ fn build_driver() -> Driver {
         e.config_var_or("python", "python", "python3")?;
         e.var(
             "json_dat",
-            &format!("$python {}/json-dat.py", e.config_val("data")),
+            &format!("$python {}/json-dat.py", e.config_val("data")?),
         )?;
         e.rule("hex-data", "$json_dat --from-json $in $out")?;
         e.rule("json-data", "$json_dat --to-json $out $in")?;
 
         // The Verilog testbench.
-        e.var("testbench", &format!("{}/tb.sv", e.config_val("data")))?;
+        e.var("testbench", &format!("{}/tb.sv", e.config_val("data")?))?;
 
         // The input data file. `sim.data` is required.
-        let data_name = e.config_val("sim.data");
+        let data_name = e.config_val("sim.data")?;
         let data_path = e.external_path(data_name.as_ref());
         e.var("sim_data", data_path.as_str())?;
 
@@ -147,7 +147,7 @@ fn build_driver() -> Driver {
         e.config_var("vitis_dir", "xilinx.vitis")?;
 
         // Package a Verilog program as an `.xo` file.
-        let rsrc_dir = e.config_val("data");
+        let rsrc_dir = e.config_val("data")?;
         e.var("gen_xo_tcl", &format!("{}/gen_xo.tcl", rsrc_dir))?;
         e.var("get_ports", &format!("{}/get-ports.py", rsrc_dir))?;
         e.config_var_or("python", "python", "python3")?;
@@ -203,7 +203,7 @@ fn build_driver() -> Driver {
 
         // A path to our stock `xrt.ini`.
         // TODO: This is where would set up for VCD generation (by generating a new `xrt.ini`).
-        let rsrc_dir = e.config_val("data");
+        let rsrc_dir = e.config_val("data")?;
         e.var("xrt_ini", &format!("{}/xrt.ini", rsrc_dir))?;
 
         // Execute via the `xclrun` tool.

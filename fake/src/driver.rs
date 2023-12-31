@@ -46,15 +46,41 @@ impl State {
     }
 }
 
-/// Code to emit a Ninja `build` command.
-pub trait EmitBuild {
-    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> std::io::Result<()>;
+/// An error that arises while emitting the Ninja file.
+#[derive(Debug)]
+pub enum EmitError {
+    Io(std::io::Error),
+    MissingConfig(String),
 }
 
-type EmitBuildFn = fn(&mut Emitter, &str, &str) -> std::io::Result<()>;
+impl From<std::io::Error> for EmitError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl std::fmt::Display for EmitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            EmitError::Io(e) => write!(f, "{}", e),
+            EmitError::MissingConfig(s) => write!(f, "missing required config key: {}", s),
+        }
+    }
+}
+
+impl std::error::Error for EmitError {}
+
+pub type EmitResult = std::result::Result<(), EmitError>;
+
+/// Code to emit a Ninja `build` command.
+pub trait EmitBuild {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult;
+}
+
+type EmitBuildFn = fn(&mut Emitter, &str, &str) -> EmitResult;
 
 impl EmitBuild for EmitBuildFn {
-    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> std::io::Result<()> {
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult {
         self(emitter, input, output)
     }
 }
@@ -66,20 +92,21 @@ pub struct EmitRuleBuild {
 }
 
 impl EmitBuild for EmitRuleBuild {
-    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> std::io::Result<()> {
-        emitter.build(&self.rule_name, input, output)
+    fn build(&self, emitter: &mut Emitter, input: &str, output: &str) -> EmitResult {
+        emitter.build(&self.rule_name, input, output)?;
+        Ok(())
     }
 }
 
 /// Code to emit Ninja code at the setup stage.
 pub trait EmitSetup {
-    fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()>;
+    fn setup(&self, emitter: &mut Emitter) -> EmitResult;
 }
 
-type EmitSetupFn = fn(&mut Emitter) -> std::io::Result<()>;
+type EmitSetupFn = fn(&mut Emitter) -> EmitResult;
 
 impl EmitSetup for EmitSetupFn {
-    fn setup(&self, emitter: &mut Emitter) -> std::io::Result<()> {
+    fn setup(&self, emitter: &mut Emitter) -> EmitResult {
         self(emitter)
     }
 }
