@@ -1,7 +1,7 @@
 use fake::{cli, Driver, DriverBuilder};
 
 fn build_driver() -> Driver {
-    let mut bld = DriverBuilder::default();
+    let mut bld = DriverBuilder::new("fud2");
 
     let dahlia = bld.state("dahlia", &["fuse"]);
     let mrxl = bld.state("mrxl", &["mrxl"]);

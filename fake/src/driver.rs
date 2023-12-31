@@ -132,6 +132,7 @@ enum Destination {
 /// A Driver encapsulates a set of States and the Operations that can transform between them. It
 /// contains all the machinery to perform builds in a given ecosystem.
 pub struct Driver {
+    pub name: String,
     pub setups: PrimaryMap<SetupRef, Setup>,
     pub states: PrimaryMap<StateRef, State>,
     pub ops: PrimaryMap<OpRef, Operation>,
@@ -287,16 +288,30 @@ impl Driver {
             .find(|(_, op_data)| op_data.name == name)
             .map(|(op, _)| op)
     }
+
+    /// The working directory to use when running a build.
+    pub fn default_workdir(&self) -> Utf8PathBuf {
+        format!(".{}", &self.name).into()
+    }
 }
 
-#[derive(Default)]
 pub struct DriverBuilder {
+    name: String,
     setups: PrimaryMap<SetupRef, Setup>,
     states: PrimaryMap<StateRef, State>,
     ops: PrimaryMap<OpRef, Operation>,
 }
 
 impl DriverBuilder {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            setups: Default::default(),
+            states: Default::default(),
+            ops: Default::default(),
+        }
+    }
+
     pub fn state(&mut self, name: &str, extensions: &[&str]) -> StateRef {
         self.states.push(State {
             name: name.to_string(),
@@ -363,6 +378,7 @@ impl DriverBuilder {
 
     pub fn build(self) -> Driver {
         Driver {
+            name: self.name,
             setups: self.setups,
             states: self.states,
             ops: self.ops,
