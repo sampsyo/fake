@@ -147,12 +147,12 @@ impl<'a> Run<'a> {
     }
 
     /// Print the `build.ninja` file to stdout.
-    pub fn emit_to_stdout(self) -> EmitResult {
+    pub fn emit_to_stdout(&self) -> EmitResult {
         self.emit(std::io::stdout())
     }
 
     /// Ensure that a directory exists and write `build.ninja` inside it.
-    pub fn emit_to_dir(self, dir: &Utf8Path) -> EmitResult {
+    pub fn emit_to_dir(&self, dir: &Utf8Path) -> EmitResult {
         std::fs::create_dir_all(dir)?;
         let ninja_path = dir.join("build.ninja");
         let ninja_file = std::fs::File::create(ninja_path)?;
@@ -161,23 +161,14 @@ impl<'a> Run<'a> {
     }
 
     /// Emit `build.ninja` to a temporary directory and then actually execute ninja.
-    pub fn emit_and_run(self, dir: &Utf8Path) -> EmitResult {
-        // TODO: This workaround for lifetime stuff in the config isn't great!!
-        let keep = self.global_config.keep_build_dir;
-        let ninja = self.global_config.ninja.clone();
-        let verbose = self.global_config.verbose;
-        let start = self.plan.workdir.join(self.plan.start.clone());
-        let end = self.plan.workdir.join(self.plan.end());
-        let stdin = self.plan.stdin;
-        let stdout = self.plan.stdout;
-
+    pub fn emit_and_run(&self, dir: &Utf8Path) -> EmitResult {
         // Emit the Ninja file.
         let stale_dir = dir.exists();
         self.emit_to_dir(dir)?;
 
         // Capture stdin.
-        if stdin {
-            let stdin_file = std::fs::File::create(start)?;
+        if self.plan.stdin {
+            let stdin_file = std::fs::File::create(self.plan.workdir.join(&self.plan.start))?;
             std::io::copy(
                 &mut std::io::stdin(),
                 &mut std::io::BufWriter::new(stdin_file),
@@ -185,17 +176,17 @@ impl<'a> Run<'a> {
         }
 
         // Run `ninja` in the working directory.
-        let mut cmd = Command::new(ninja);
+        let mut cmd = Command::new(&self.global_config.ninja);
         cmd.current_dir(dir);
-        if stdout && !verbose {
+        if self.plan.stdout && !self.global_config.verbose {
             // When we're printing to stdout, suppress Ninja's output by default.
             cmd.stdout(std::process::Stdio::null());
         }
         cmd.status()?;
 
         // Emit stdout.
-        if stdout {
-            let stdout_file = std::fs::File::open(end)?;
+        if self.plan.stdout {
+            let stdout_file = std::fs::File::open(self.plan.workdir.join(self.plan.end()))?;
             std::io::copy(
                 &mut std::io::BufReader::new(stdout_file),
                 &mut std::io::stdout(),
@@ -203,15 +194,15 @@ impl<'a> Run<'a> {
         }
 
         // Remove the temporary directory unless it already existed at the start *or* the user specified `--keep`.
-        if !keep && !stale_dir {
+        if !self.global_config.keep_build_dir && !stale_dir {
             std::fs::remove_dir_all(dir)?;
         }
 
         Ok(())
     }
 
-    fn emit<T: Write + 'static>(self, out: T) -> EmitResult {
-        let mut emitter = Emitter::new(out, self.config_data, self.plan.workdir);
+    fn emit<T: Write + 'static>(&self, out: T) -> EmitResult {
+        let mut emitter = Emitter::new(out, self.config_data.clone(), self.plan.workdir.clone());
 
         // Emit the setup for each operation used in the plan, only once.
         let mut done_setups = HashSet::<SetupRef>::new();
@@ -228,9 +219,9 @@ impl<'a> Run<'a> {
 
         // Emit the build commands for each step in the plan.
         emitter.comment("build targets")?;
-        let mut last_file = self.plan.start;
-        for (op, out_file) in self.plan.steps {
-            let op = &self.driver.ops[op];
+        let mut last_file = &self.plan.start;
+        for (op, out_file) in &self.plan.steps {
+            let op = &self.driver.ops[*op];
             op.emit
                 .build(&mut emitter, last_file.as_str(), out_file.as_str())?;
             last_file = out_file;
