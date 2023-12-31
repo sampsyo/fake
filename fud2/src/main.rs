@@ -16,12 +16,12 @@ fn build_driver() -> Driver {
         e.config_var_or("calyx_exe", "calyx.exe", "$calyx_base/target/debug/calyx")?;
         e.rule(
             "calyx",
-            "$calyx_exe -l $calyx_base -b $backend --disable-verify $in > $out",
+            "$calyx_exe -l $calyx_base -b $backend --disable-verify $args $in > $out",
         )?;
         Ok(())
     });
     bld.op(
-        "calyx",
+        "calyx-to-verilog",
         &[calyx_setup],
         calyx,
         verilog,
@@ -158,17 +158,33 @@ fn build_driver() -> Driver {
 
         Ok(())
     });
-    bld.op("xo", &[xilinx_setup], verilog, xo, |e, input, output| {
-        // Extra ingredients for the `.xo` package.
-        e.build_cmd("toplevel.v", "calyx", &[input], &[])?;
-        e.arg("backend", "xilinx")?;
-        e.build_cmd("kernel.xml", "calyx", &[input], &[])?;
-        e.arg("backend", "xilinx-xml")?;
+    bld.op(
+        "xo",
+        &[calyx_setup, xilinx_setup],
+        calyx,
+        xo,
+        |e, input, output| {
+            // Emit the Verilog itself in "synthesis mode."
+            e.build_cmd("main.sv", "calyx", &[input], &[])?;
+            e.arg("backend", "verilog")?;
+            e.arg("args", "--synthesis -p external")?;
 
-        // Package the `.xo` itelf.
-        e.build_cmd(output, "gen-xo", &[], &[input, "toplevel.v", "kernel.xml"])?;
-        Ok(())
-    });
+            // Extra ingredients for the `.xo` package.
+            e.build_cmd("toplevel.v", "calyx", &[input], &[])?;
+            e.arg("backend", "xilinx")?;
+            e.build_cmd("kernel.xml", "calyx", &[input], &[])?;
+            e.arg("backend", "xilinx-xml")?;
+
+            // Package the `.xo` itelf.
+            e.build_cmd(
+                output,
+                "gen-xo",
+                &[],
+                &["main.sv", "toplevel.v", "kernel.xml"],
+            )?;
+            Ok(())
+        },
+    );
     bld.op("xclbin", &[xilinx_setup], xo, xclbin, |e, input, output| {
         e.build_cmd(output, "compile-xclbin", &[input], &[])?;
         Ok(())
