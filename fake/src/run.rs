@@ -210,7 +210,7 @@ impl<'a> Run<'a> {
             for setup in &self.driver.ops[*op].setups {
                 if done_setups.insert(*setup) {
                     let setup = &self.driver.setups[*setup];
-                    writeln!(emitter.out, "# {}", setup.name)?; // TODO more descriptive name
+                    writeln!(emitter.out, "# {}", setup.name)?;
                     setup.emit.setup(&mut emitter)?;
                     writeln!(emitter.out)?;
                 }
