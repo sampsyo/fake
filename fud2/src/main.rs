@@ -152,11 +152,13 @@ fn build_driver() -> Driver {
         e.var("get_ports", &format!("{}/get-ports.py", rsrc_dir))?;
         e.config_var_or("python", "python", "python3")?;
         e.rule("gen-xo", "$vivado_dir/bin/vivado -mode batch -source $gen_xo_tcl -tclargs $out `$python $get_ports kernel.xml`")?;
+        e.arg("pool", "console")?;  // Lets Ninja stream the tool output "live."
 
         // Compile an `.xo` file to an `.xclbin` file, which is where the actual EDA work occurs.
         e.config_var_or("xilinx_mode", "xilinx.mode", "hw_emu")?;
         e.config_var_or("platform", "xilinx.device", "xilinx_u50_gen3x16_xdma_201920_3")?;
         e.rule("compile-xclbin", "$vitis_dir/bin/v++ -g -t $xilinx_mode --platform $platform --save-temps --profile.data all:all:all --profile.exec all:all:all -lo $out $in")?;
+        e.arg("pool", "console")?;
 
         Ok(())
     });
