@@ -146,12 +146,18 @@ fn build_driver() -> Driver {
     );
 
     // Interpreter.
+    let debug = bld.state("debug", &["debug_out"]); // A fake state; the output isn't real.
     let cider_setup = bld.setup("Cider interpreter", |e| {
         e.config_var_or("cider", "cider.exe", "$calyx_base/target/debug/cider")?;
         e.rule(
             "cider",
             "$cider -l $calyx_base --raw --data data.json $in > $out",
         )?;
+        e.rule(
+            "cider-debug",
+            "$cider -l $calyx_base --data data.json $in debug",
+        )?;
+        e.arg("pool", "console")?;
 
         // TODO Can we reduce the duplication around `rsrc_dir` and `$python`?
         let rsrc_dir = e.config_val("data")?;
@@ -174,6 +180,16 @@ fn build_driver() -> Driver {
             let out_file = "interp_out.json";
             e.build_cmd(out_file, "cider", &[input], &["data.json"])?;
             e.build_cmd(output, "interp-to-dat", &[out_file], &["$sim_data"])?;
+            Ok(())
+        },
+    );
+    bld.op(
+        "debug",
+        &[sim_setup, calyx_setup, cider_setup],
+        calyx,
+        debug,
+        |e, input, output| {
+            e.build_cmd(output, "cider-debug", &[input], &["data.json"])?;
             Ok(())
         },
     );
