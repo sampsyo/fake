@@ -146,7 +146,7 @@ fn build_driver() -> Driver {
     );
 
     // Interpreter.
-    let debug = bld.state("debug", &["debug_out"]); // A fake state; the output isn't real.
+    let debug = bld.state("debug", &[""]); // A pseudo-state.
     let cider_setup = bld.setup("Cider interpreter", |e| {
         e.config_var_or("cider", "cider.exe", "$calyx_base/target/debug/cider")?;
         e.rule(

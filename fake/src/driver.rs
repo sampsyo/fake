@@ -5,7 +5,15 @@ use pathdiff::diff_utf8_paths;
 
 /// A State is a type of file that Operations produce or consume.
 pub struct State {
+    /// The name of the state, for the UI.
     pub name: String,
+
+    /// The file extensions that this state can be represented by.
+    ///
+    /// The first extension in the list is used when generating a new filename for the state. If
+    /// the list is empty, this is a "pseudo-state" that doesn't correspond to an actual file.
+    /// Pseudo-states can only be final outputs; they are appropraite for representing actions that
+    /// interact directly with the user, for example.
     pub extensions: Vec<String>,
 }
 
@@ -43,6 +51,11 @@ impl State {
     /// Check whether a filename extension indicates this state.
     fn ext_matches(&self, ext: &str) -> bool {
         self.extensions.iter().any(|e| e == ext)
+    }
+
+    /// Is this a "pseudo-state": doesn't correspond to an actual file, and must be an output state?
+    fn is_pseudo(&self) -> bool {
+        self.extensions.is_empty()
     }
 }
 
@@ -190,7 +203,8 @@ impl Driver {
             last_step.1 = relative_path(&end_file, &req.workdir);
             false
         } else {
-            true
+            // Print to stdout if the last state is a real (non-pseudo) state.
+            !self.states[req.end_state].is_pseudo()
         };
 
         Some(Plan {
