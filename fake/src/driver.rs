@@ -172,9 +172,13 @@ impl Driver {
 
     /// Generate a filename with an extension appropriate for the given State.
     fn gen_name(&self, stem: &str, state: StateRef) -> Utf8PathBuf {
-        // TODO avoid collisions in case we reuse extensions...
-        let ext = &self.states[state].extensions[0];
-        Utf8PathBuf::from(stem).with_extension(ext)
+        let state = &self.states[state];
+        if state.is_pseudo() {
+            Utf8PathBuf::from(format!("_pseudo_{}", state.name))
+        } else {
+            // TODO avoid collisions in case we reuse extensions...
+            Utf8PathBuf::from(stem).with_extension(&state.extensions[0])
+        }
     }
 
     pub fn plan(&self, req: Request) -> Option<Plan> {
