@@ -1,4 +1,8 @@
-use fake::{cli, Driver, DriverBuilder};
+use fake::{
+    cli,
+    run::{EmitResult, Emitter},
+    Driver, DriverBuilder,
+};
 
 fn build_driver() -> Driver {
     let mut bld = DriverBuilder::new("fud2");
@@ -84,34 +88,36 @@ fn build_driver() -> Driver {
         e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
         e.rule(
             "icarus-sim",
-            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1 > $out",
+            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit $args > $out",
         )?;
         Ok(())
     });
+    fn emit_icarus(e: &mut Emitter, input: &str, output: &str, args: &str) -> EmitResult {
+        // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
+        // from Verilog) because Icarus requires the `--disable-verify` flag.
+        let verilog_name = "sim.sv";
+        e.build_cmd(verilog_name, "calyx", &[input], &[])?;
+        e.arg("backend", "verilog")?;
+        e.arg("args", "--disable-verify")?;
+
+        // Compile the Verilog.
+        let bin_name = "icarus_bin";
+        e.build("icarus-compile", verilog_name, bin_name)?;
+
+        // Run the simulation.
+        e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
+        e.arg("bin", bin_name)?;
+        e.arg("args", args)?;
+        e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
+
+        Ok(())
+    }
     bld.op(
         "icarus",
         &[calyx_setup, sim_setup, icarus_setup],
         calyx,
         dat,
-        |e, input, output| {
-            // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
-            // from Verilog) because Icarus requires the `--disable-verify` flag.
-            let verilog_name = "sim.sv";
-            e.build_cmd(verilog_name, "calyx", &[input], &[])?;
-            e.arg("backend", "verilog")?;
-            e.arg("args", "--disable-verify")?;
-
-            // Compile the Verilog.
-            let bin_name = "icarus_bin";
-            e.build("icarus-compile", verilog_name, bin_name)?;
-
-            // Run the simulation.
-            e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
-            e.arg("bin", bin_name)?;
-            e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
-
-            Ok(())
-        },
+        |e, input, output| emit_icarus(e, input, output, "+NOTRACE=1"),
     );
 
     // Verilator.
