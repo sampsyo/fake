@@ -155,7 +155,7 @@ fn build_driver() -> Driver {
         )?;
         e.rule(
             "cider-debug",
-            "$cider -l $calyx_base --data data.json $in debug",
+            "$cider -l $calyx_base --data data.json $in debug || true",
         )?;
         e.arg("pool", "console")?;
 
