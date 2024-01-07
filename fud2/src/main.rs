@@ -6,13 +6,12 @@ fn build_driver() -> Driver {
     // Calyx.
     let calyx = bld.state("calyx", &["futil"]);
     let verilog = bld.state("verilog", &["sv", "v"]);
-    // TODO: Currently hard-coding `--disable-verify`; this is only necessary for Icraus.
     let calyx_setup = bld.setup("Calyx compiler", |e| {
         e.config_var("calyx_base", "calyx.base")?;
         e.config_var_or("calyx_exe", "calyx.exe", "$calyx_base/target/debug/calyx")?;
         e.rule(
             "calyx",
-            "$calyx_exe -l $calyx_base -b $backend --disable-verify $args $in > $out",
+            "$calyx_exe -l $calyx_base -b $backend $args $in > $out",
         )?;
         Ok(())
     });
@@ -91,13 +90,22 @@ fn build_driver() -> Driver {
     });
     bld.op(
         "icarus",
-        &[sim_setup, icarus_setup],
-        verilog,
+        &[calyx_setup, sim_setup, icarus_setup],
+        calyx,
         dat,
         |e, input, output| {
-            let bin_name = "icarus_bin";
-            e.build("icarus-compile", input, bin_name)?;
+            // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
+            // from Verilog) because Icarus requires the `--disable-verify` flag.
+            let verilog_name = "sim.sv";
+            e.build_cmd(verilog_name, "calyx", &[input], &[])?;
+            e.arg("backend", "verilog")?;
+            e.arg("args", "--disable-verify")?;
 
+            // Compile the Verilog.
+            let bin_name = "icarus_bin";
+            e.build("icarus-compile", verilog_name, bin_name)?;
+
+            // Run the simulation.
             e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
             e.arg("bin", bin_name)?;
             e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
