@@ -108,7 +108,7 @@ fn build_driver() -> Driver {
 
     // Verilator.
     let verilator_setup = bld.setup("Verilator", |e| {
-        e.var("verilator", "verilator")?;
+        e.config_var_or("verilator", "verilator.exe", "verilator")?;
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
         e.rule(
             "verilator-compile",
