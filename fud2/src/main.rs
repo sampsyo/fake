@@ -145,6 +145,39 @@ fn build_driver() -> Driver {
         },
     );
 
+    // Interpreter.
+    let cider_setup = bld.setup("Cider interpreter", |e| {
+        e.config_var_or("cider", "cider.exe", "$calyx_base/target/debug/cider")?;
+        e.rule(
+            "cider",
+            "$cider -l $calyx_base --raw --data data.json $in > $out",
+        )?;
+
+        // TODO Can we reduce the duplication around `rsrc_dir` and `$python`?
+        let rsrc_dir = e.config_val("data")?;
+        e.var("interp-dat", &format!("{}/interp-dat.py", rsrc_dir))?;
+        e.config_var_or("python", "python", "python3")?;
+        e.rule("dat-to-interp", "$python $interp-dat --to-interp $in")?;
+        e.rule(
+            "interp-to-dat",
+            "$python $interp-dat --from-interp $in $sim_data > $out",
+        )?;
+        e.build_cmd("data.json", "dat-to-interp", &["$sim_data"], &[])?;
+        Ok(())
+    });
+    bld.op(
+        "interp",
+        &[sim_setup, calyx_setup, cider_setup],
+        calyx,
+        dat,
+        |e, input, output| {
+            let out_file = "interp_out.json";
+            e.build_cmd(out_file, "cider", &[input], &["data.json"])?;
+            e.build_cmd(output, "interp-to-dat", &[out_file], &["$sim_data"])?;
+            Ok(())
+        },
+    );
+
     // Xilinx compilation.
     let xo = bld.state("xo", &["xo"]);
     let xclbin = bld.state("xclbin", &["xclbin"]);
