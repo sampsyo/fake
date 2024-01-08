@@ -54,6 +54,7 @@ fn build_driver() -> Driver {
 
     // Shared machinery for RTL simulators.
     let dat = bld.state("dat", &["json"]);
+    let vcd = bld.state("vcd", &["vcd"]);
     let sim_setup = bld.setup("RTL simulation", |e| {
         // Data conversion to and from JSON.
         e.config_var_or("python", "python", "python3")?;
@@ -92,7 +93,7 @@ fn build_driver() -> Driver {
         )?;
         Ok(())
     });
-    fn emit_icarus(e: &mut Emitter, input: &str, output: &str, args: &str) -> EmitResult {
+    fn emit_icarus(e: &mut Emitter, input: &str, args: &str) -> EmitResult {
         // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
         // from Verilog) because Icarus requires the `--disable-verify` flag.
         let verilog_name = "sim.sv";
@@ -108,7 +109,6 @@ fn build_driver() -> Driver {
         e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
         e.arg("bin", bin_name)?;
         e.arg("args", args)?;
-        e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
 
         Ok(())
     }
@@ -117,7 +117,21 @@ fn build_driver() -> Driver {
         &[calyx_setup, sim_setup, icarus_setup],
         calyx,
         dat,
-        |e, input, output| emit_icarus(e, input, output, "+NOTRACE=1"),
+        |e, input, output| {
+            emit_icarus(e, input, "+NOTRACE=1")?;
+            e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
+            Ok(())
+        },
+    );
+    bld.op(
+        "icarus-trace",
+        &[calyx_setup, sim_setup, icarus_setup],
+        calyx,
+        vcd,
+        |e, input, output| {
+            let args = format!("+NOTRACE=0 +OUT={}", output);
+            emit_icarus(e, input, &args)
+        },
     );
 
     // Verilator.
