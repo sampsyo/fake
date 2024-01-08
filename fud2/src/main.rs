@@ -155,19 +155,27 @@ fn build_driver() -> Driver {
         )?;
         Ok(())
     });
+    fn emit_verilator(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
+        let out_dir = "verilator-out";
+        let sim_bin = format!("{}/VTOP", out_dir);
+        e.build("verilator-compile", input, &sim_bin)?;
+        e.arg("out_dir", out_dir)?;
+
+        emit_sim_run(e, &sim_bin, output, trace)
+    }
     bld.op(
         "verilator",
         &[sim_setup, verilator_setup],
         verilog,
         dat,
-        |e, input, output| {
-            let out_dir = "verilator-out";
-            let sim_bin = format!("{}/VTOP", out_dir);
-            e.build("verilator-compile", input, &sim_bin)?;
-            e.arg("out_dir", out_dir)?;
-
-            emit_sim_run(e, &sim_bin, output, false)
-        },
+        |e, input, output| emit_verilator(e, input, output, false),
+    );
+    bld.op(
+        "verilator-trace",
+        &[sim_setup, verilator_setup],
+        verilog,
+        vcd,
+        |e, input, output| emit_verilator(e, input, output, true),
     );
 
     // Interpreter.
