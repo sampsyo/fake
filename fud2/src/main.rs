@@ -77,34 +77,23 @@ fn build_driver() -> Driver {
         e.var("datadir", "sim_data")?;
         e.build("hex-data", "$sim_data", "$datadir")?;
 
+        // Rule for simulation execution.
+        e.rule(
+            "sim-run",
+            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit $args > $out",
+        )?;
+
         // More shared configuration.
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
 
         Ok(())
     });
-
-    // Icarus Verilog.
-    let icarus_setup = bld.setup("Icarus Verilog", |e| {
-        e.var("iverilog", "iverilog")?;
-        e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
-        e.rule(
-            "icarus-sim",
-            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit $args > $out",
-        )?;
-        Ok(())
-    });
-    fn emit_sim_run(
-        e: &mut Emitter,
-        bin: &str,
-        rule: &str,
-        output: &str,
-        trace: bool,
-    ) -> EmitResult {
+    fn emit_sim_run(e: &mut Emitter, bin: &str, output: &str, trace: bool) -> EmitResult {
         // Run the simulation.
         if trace {
-            e.build_cmd(&["sim.log", output], rule, &[bin, "$datadir"], &[])?;
+            e.build_cmd(&["sim.log", output], "sim-run", &[bin, "$datadir"], &[])?;
         } else {
-            e.build_cmd(&["sim.log"], rule, &[bin, "$datadir"], &[])?;
+            e.build_cmd(&["sim.log"], "sim-run", &[bin, "$datadir"], &[])?;
         }
         e.arg("bin", bin)?;
         if trace {
@@ -120,6 +109,13 @@ fn build_driver() -> Driver {
 
         Ok(())
     }
+
+    // Icarus Verilog.
+    let icarus_setup = bld.setup("Icarus Verilog", |e| {
+        e.var("iverilog", "iverilog")?;
+        e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
+        Ok(())
+    });
     fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
         // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
         // from Verilog) because Icarus requires the `--disable-verify` flag.
@@ -132,7 +128,7 @@ fn build_driver() -> Driver {
         let bin_name = "icarus_bin";
         e.build("icarus-compile", verilog_name, bin_name)?;
 
-        emit_sim_run(e, bin_name, "icarus-sim", output, trace)
+        emit_sim_run(e, bin_name, output, trace)
     }
     bld.op(
         "icarus",
@@ -157,10 +153,6 @@ fn build_driver() -> Driver {
             "verilator-compile",
             "$verilator $in $testbench --trace --binary --top-module TOP -fno-inline -Mdir $out_dir",
         )?;
-        e.rule(
-            "verilator-sim",
-            "./$bin +DATA=$datadir +CYCLE_LIMIT=$cycle_limit +NOTRACE=1 > $out",
-        )?;
         Ok(())
     });
     bld.op(
@@ -174,7 +166,7 @@ fn build_driver() -> Driver {
             e.build("verilator-compile", input, &sim_bin)?;
             e.arg("out_dir", out_dir)?;
 
-            emit_sim_run(e, &sim_bin, "verilator-sim", output, false)
+            emit_sim_run(e, &sim_bin, output, false)
         },
     );
 
