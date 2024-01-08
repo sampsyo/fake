@@ -25,7 +25,7 @@ fn build_driver() -> Driver {
         calyx,
         verilog,
         |e, input, output| {
-            e.build_cmd(output, "calyx", &[input], &[])?;
+            e.build_cmd(&[output], "calyx", &[input], &[])?;
             e.arg("backend", "verilog")?;
             Ok(())
         },
@@ -97,7 +97,7 @@ fn build_driver() -> Driver {
         // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
         // from Verilog) because Icarus requires the `--disable-verify` flag.
         let verilog_name = "sim.sv";
-        e.build_cmd(verilog_name, "calyx", &[input], &[])?;
+        e.build_cmd(&[verilog_name], "calyx", &[input], &[])?;
         e.arg("backend", "verilog")?;
         e.arg("args", "--disable-verify")?;
 
@@ -106,7 +106,7 @@ fn build_driver() -> Driver {
         e.build("icarus-compile", verilog_name, bin_name)?;
 
         // Run the simulation.
-        e.build_cmd("sim.log", "icarus-sim", &[bin_name, "$datadir"], &[])?;
+        e.build_cmd(&["sim.log"], "icarus-sim", &[bin_name, "$datadir"], &[])?;
         e.arg("bin", bin_name)?;
         e.arg("args", args)?;
 
@@ -119,7 +119,7 @@ fn build_driver() -> Driver {
         dat,
         |e, input, output| {
             emit_icarus(e, input, "+NOTRACE=1")?;
-            e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
+            e.build_cmd(&[output], "json-data", &["$datadir", "sim.log"], &[])?;
             Ok(())
         },
     );
@@ -157,9 +157,9 @@ fn build_driver() -> Driver {
             let out_dir = "verilator-out";
             e.build("verilator-compile", input, out_dir)?;
 
-            e.build_cmd("sim.log", "verilator-sim", &[out_dir, "$datadir"], &[])?;
+            e.build_cmd(&["sim.log"], "verilator-sim", &[out_dir, "$datadir"], &[])?;
             e.arg("bin", &format!("{}/VTOP", out_dir))?;
-            e.build_cmd(output, "json-data", &["$datadir", "sim.log"], &[])?;
+            e.build_cmd(&[output], "json-data", &["$datadir", "sim.log"], &[])?;
 
             Ok(())
         },
@@ -188,7 +188,7 @@ fn build_driver() -> Driver {
             "interp-to-dat",
             "$python $interp-dat --from-interp $in $sim_data > $out",
         )?;
-        e.build_cmd("data.json", "dat-to-interp", &["$sim_data"], &[])?;
+        e.build_cmd(&["data.json"], "dat-to-interp", &["$sim_data"], &[])?;
         Ok(())
     });
     bld.op(
@@ -198,8 +198,8 @@ fn build_driver() -> Driver {
         dat,
         |e, input, output| {
             let out_file = "interp_out.json";
-            e.build_cmd(out_file, "cider", &[input], &["data.json"])?;
-            e.build_cmd(output, "interp-to-dat", &[out_file], &["$sim_data"])?;
+            e.build_cmd(&[out_file], "cider", &[input], &["data.json"])?;
+            e.build_cmd(&[output], "interp-to-dat", &[out_file], &["$sim_data"])?;
             Ok(())
         },
     );
@@ -209,7 +209,7 @@ fn build_driver() -> Driver {
         calyx,
         debug,
         |e, input, output| {
-            e.build_cmd(output, "cider-debug", &[input], &["data.json"])?;
+            e.build_cmd(&[output], "cider-debug", &[input], &["data.json"])?;
             Ok(())
         },
     );
@@ -245,19 +245,19 @@ fn build_driver() -> Driver {
         xo,
         |e, input, output| {
             // Emit the Verilog itself in "synthesis mode."
-            e.build_cmd("main.sv", "calyx", &[input], &[])?;
+            e.build_cmd(&["main.sv"], "calyx", &[input], &[])?;
             e.arg("backend", "verilog")?;
             e.arg("args", "--synthesis -p external")?;
 
             // Extra ingredients for the `.xo` package.
-            e.build_cmd("toplevel.v", "calyx", &[input], &[])?;
+            e.build_cmd(&["toplevel.v"], "calyx", &[input], &[])?;
             e.arg("backend", "xilinx")?;
-            e.build_cmd("kernel.xml", "calyx", &[input], &[])?;
+            e.build_cmd(&["kernel.xml"], "calyx", &[input], &[])?;
             e.arg("backend", "xilinx-xml")?;
 
             // Package the `.xo`.
             e.build_cmd(
-                output,
+                &[output],
                 "gen-xo",
                 &[],
                 &["main.sv", "toplevel.v", "kernel.xml"],
@@ -266,7 +266,7 @@ fn build_driver() -> Driver {
         },
     );
     bld.op("xclbin", &[xilinx_setup], xo, xclbin, |e, input, output| {
-        e.build_cmd(output, "compile-xclbin", &[input], &[])?;
+        e.build_cmd(&[output], "compile-xclbin", &[input], &[])?;
         Ok(())
     });
 
@@ -275,7 +275,7 @@ fn build_driver() -> Driver {
     let xrt_setup = bld.setup("Xilinx execution via XRT", |e| {
         // Generate `emconfig.json`.
         e.rule("emconfig", "$vitis_dir/bin/emconfigutil --platform $platform")?;
-        e.build_cmd("emconfig.json", "emconfig", &[], &[])?;
+        e.build_cmd(&["emconfig.json"], "emconfig", &[], &[])?;
 
         // A path to our stock `xrt.ini`.
         // TODO: This is where would set up for VCD generation (by generating a new `xrt.ini`).
@@ -295,7 +295,12 @@ fn build_driver() -> Driver {
         xclbin,
         dat,
         |e, input, output| {
-            e.build_cmd(output, "xclrun", &[input, "$sim_data"], &["emconfig.json"])?;
+            e.build_cmd(
+                &[output],
+                "xclrun",
+                &[input, "$sim_data"],
+                &["emconfig.json"],
+            )?;
             Ok(())
         },
     );
