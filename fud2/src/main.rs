@@ -93,7 +93,7 @@ fn build_driver() -> Driver {
         )?;
         Ok(())
     });
-    fn emit_icarus(e: &mut Emitter, input: &str, args: &str) -> EmitResult {
+    fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
         // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
         // from Verilog) because Icarus requires the `--disable-verify` flag.
         let verilog_name = "sim.sv";
@@ -106,9 +106,27 @@ fn build_driver() -> Driver {
         e.build("icarus-compile", verilog_name, bin_name)?;
 
         // Run the simulation.
-        e.build_cmd(&["sim.log"], "icarus-sim", &[bin_name, "$datadir"], &[])?;
+        if trace {
+            e.build_cmd(
+                &["sim.log", output],
+                "icarus-sim",
+                &[bin_name, "$datadir"],
+                &[],
+            )?;
+        } else {
+            e.build_cmd(&["sim.log"], "icarus-sim", &[bin_name, "$datadir"], &[])?;
+        }
         e.arg("bin", bin_name)?;
-        e.arg("args", args)?;
+        if trace {
+            e.arg("args", &format!("+NOTRACE=0 +OUT={}", output))?;
+        } else {
+            e.arg("args", "+NOTRACE=1")?;
+        }
+
+        // Convert the output data (only in non-VCD mode).
+        if !trace {
+            e.build_cmd(&[output], "json-data", &["$datadir", "sim.log"], &[])?;
+        }
 
         Ok(())
     }
@@ -117,21 +135,14 @@ fn build_driver() -> Driver {
         &[calyx_setup, sim_setup, icarus_setup],
         calyx,
         dat,
-        |e, input, output| {
-            emit_icarus(e, input, "+NOTRACE=1")?;
-            e.build_cmd(&[output], "json-data", &["$datadir", "sim.log"], &[])?;
-            Ok(())
-        },
+        |e, input, output| emit_icarus(e, input, output, false),
     );
     bld.op(
         "icarus-trace",
         &[calyx_setup, sim_setup, icarus_setup],
         calyx,
         vcd,
-        |e, input, output| {
-            let args = format!("+NOTRACE=0 +OUT={}", output);
-            emit_icarus(e, input, &args)
-        },
+        |e, input, output| emit_icarus(e, input, output, true),
     );
 
     // Verilator.
