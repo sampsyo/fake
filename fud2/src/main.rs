@@ -290,15 +290,17 @@ fn build_driver() -> Driver {
         e.rule("emconfig", "$vitis_dir/bin/emconfigutil --platform $platform")?;
         e.build_cmd(&["emconfig.json"], "emconfig", &[], &[])?;
 
-        // A path to our stock `xrt.ini`.
-        // TODO: This is where would set up for VCD generation (by generating a new `xrt.ini`).
-        let rsrc_dir = e.config_val("data")?;
-        e.var("xrt_ini", &format!("{}/xrt.ini", rsrc_dir))?;
-
         // Execute via the `xclrun` tool.
         e.config_var("xrt_dir", "xilinx.xrt")?;
         e.rule("xclrun", "bash -c 'source $vitis_dir/settings64.sh ; source $xrt_dir/setup.sh ; XRT_INI_PATH=$xrt_ini EMCONFIG_PATH=. XCL_EMULATION_MODE=$xilinx_mode $python -m fud.xclrun --out $out $in'")?;
         e.arg("pool", "console")?;
+
+        // "Pre-sim" and "post-sim" scripts for simulation.
+        e.rule("echo", "echo $contents > $out")?;
+        e.build_cmd(&["pre_sim.tcl"], "echo", &[""], &[""])?;
+        e.arg("contents", "open_vcd\nlog_vcd *\n")?;
+        e.build_cmd(&["post_sim.tcl"], "echo", &[""], &[""])?;
+        e.arg("contents", "close_vcd\n")?;
 
         Ok(())
     });
@@ -314,6 +316,25 @@ fn build_driver() -> Driver {
                 &[input, "$sim_data"],
                 &["emconfig.json"],
             )?;
+            let rsrc_dir = e.config_val("data")?;
+            e.arg("xrt_ini", &format!("{}/xrt.ini", rsrc_dir))?;
+            Ok(())
+        },
+    );
+    bld.op(
+        "xrt-trace",
+        &[xilinx_setup, sim_setup, xrt_setup],
+        xclbin,
+        vcd,
+        |e, input, output| {
+            e.build_cmd(
+                &[output], // TODO not the VCD, yet...
+                "xclrun",
+                &[input, "$sim_data"],
+                &["emconfig.json", "pre_sim.tcl", "post_sim.tcl"],
+            )?;
+            let rsrc_dir = e.config_val("data")?;
+            e.arg("xrt_ini", &format!("{}/xrt_trace.ini", rsrc_dir))?;
             Ok(())
         },
     );
