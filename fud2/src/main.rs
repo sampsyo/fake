@@ -93,30 +93,20 @@ fn build_driver() -> Driver {
         )?;
         Ok(())
     });
-    fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
-        // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
-        // from Verilog) because Icarus requires the `--disable-verify` flag.
-        let verilog_name = "sim.sv";
-        e.build_cmd(&[verilog_name], "calyx", &[input], &[])?;
-        e.arg("backend", "verilog")?;
-        e.arg("args", "--disable-verify")?;
-
-        // Compile the Verilog.
-        let bin_name = "icarus_bin";
-        e.build("icarus-compile", verilog_name, bin_name)?;
-
+    fn emit_sim_run(
+        e: &mut Emitter,
+        bin: &str,
+        rule: &str,
+        output: &str,
+        trace: bool,
+    ) -> EmitResult {
         // Run the simulation.
         if trace {
-            e.build_cmd(
-                &["sim.log", output],
-                "icarus-sim",
-                &[bin_name, "$datadir"],
-                &[],
-            )?;
+            e.build_cmd(&["sim.log", output], rule, &[bin, "$datadir"], &[])?;
         } else {
-            e.build_cmd(&["sim.log"], "icarus-sim", &[bin_name, "$datadir"], &[])?;
+            e.build_cmd(&["sim.log"], rule, &[bin, "$datadir"], &[])?;
         }
-        e.arg("bin", bin_name)?;
+        e.arg("bin", bin)?;
         if trace {
             e.arg("args", &format!("+NOTRACE=0 +OUT={}", output))?;
         } else {
@@ -129,6 +119,20 @@ fn build_driver() -> Driver {
         }
 
         Ok(())
+    }
+    fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
+        // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
+        // from Verilog) because Icarus requires the `--disable-verify` flag.
+        let verilog_name = "sim.sv";
+        e.build_cmd(&[verilog_name], "calyx", &[input], &[])?;
+        e.arg("backend", "verilog")?;
+        e.arg("args", "--disable-verify")?;
+
+        // Compile the Verilog.
+        let bin_name = "icarus_bin";
+        e.build("icarus-compile", verilog_name, bin_name)?;
+
+        emit_sim_run(e, bin_name, "icarus-sim", output, trace)
     }
     bld.op(
         "icarus",
@@ -151,7 +155,7 @@ fn build_driver() -> Driver {
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
         e.rule(
             "verilator-compile",
-            "$verilator $in $testbench --trace --binary --top-module TOP -fno-inline -Mdir $out",
+            "$verilator $in $testbench --trace --binary --top-module TOP -fno-inline -Mdir $out_dir",
         )?;
         e.rule(
             "verilator-sim",
@@ -166,13 +170,11 @@ fn build_driver() -> Driver {
         dat,
         |e, input, output| {
             let out_dir = "verilator-out";
-            e.build("verilator-compile", input, out_dir)?;
+            let sim_bin = format!("{}/VTOP", out_dir);
+            e.build("verilator-compile", input, &sim_bin)?;
+            e.arg("out_dir", out_dir)?;
 
-            e.build_cmd(&["sim.log"], "verilator-sim", &[out_dir, "$datadir"], &[])?;
-            e.arg("bin", &format!("{}/VTOP", out_dir))?;
-            e.build_cmd(&[output], "json-data", &["$datadir", "sim.log"], &[])?;
-
-            Ok(())
+            emit_sim_run(e, &sim_bin, "verilator-sim", output, false)
         },
     );
 
