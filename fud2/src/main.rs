@@ -186,7 +186,7 @@ fn build_driver() -> Driver {
         &[calyx_setup, firrtl_verilog_setup],
         calyx,
         verilog,
-        |e, input, output| emit_verilog_via_firrtl(e, input, output),
+        emit_verilog_via_firrtl,
     );
 
     // Run the whole Calyx --> FIRRTL --> System-Verilog --> Execution via Icarus-Verilog pipeline
