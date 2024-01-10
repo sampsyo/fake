@@ -168,20 +168,36 @@ fn build_driver() -> Driver {
         Ok(())
     });
 
+    // Helper function for the Calyx --> FIRRTL --> System-Verilog pipeline
+    fn emit_verilog_via_firrtl(e: &mut Emitter, input: &str, output: &str) -> EmitResult {
+        // Generate the FIRRTL
+        let firrtl_name = "sim.fir";
+        e.build_cmd(&[firrtl_name], "calyx", &[input], &[])?;
+        e.arg("backend", "firrtl")?;
+
+        // Compile the FIRRTL into Verilog
+        e.build_cmd(&[output], "firrtl", &[firrtl_name], &[])?;
+
+        Ok(())
+    }
+
+    bld.op(
+        "firrtl",
+        &[calyx_setup, firrtl_verilog_setup],
+        calyx,
+        verilog,
+        |e, input, output| emit_verilog_via_firrtl(e, input, output),
+    );
+
+    // Run the whole Calyx --> FIRRTL --> System-Verilog --> Execution via Icarus-Verilog pipeline
     bld.op(
         "icarus-firrtl",
         &[calyx_setup, firrtl_verilog_setup, sim_setup, icarus_setup],
         calyx,
         dat,
         |e, input, output| {
-            // Generate the FIRRTL
-            let firrtl_name = "sim.fir";
-            e.build_cmd(&[firrtl_name], "calyx", &[input], &[])?;
-            e.arg("backend", "firrtl")?;
-
-            // Compile the FIRRTL into Verilog
             let verilog_name = "sim.sv";
-            e.build_cmd(&[verilog_name], "firrtl", &[firrtl_name], &[])?;
+            emit_verilog_via_firrtl(e, input, verilog_name)?;
 
             // borrowed the below from emit_icarus
             // Compile the Verilog.
