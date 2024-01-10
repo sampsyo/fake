@@ -31,6 +31,20 @@ fn build_driver() -> Driver {
         },
     );
 
+    // Calyx-FIRRTL (move elsewhere)
+    let firrtl = bld.state("firrtl", &["fir"]);
+    bld.op(
+        "calyx-to-firrtl",
+        &[calyx_setup],
+        calyx,
+        firrtl,
+        |e, input, output| {
+            e.build_cmd(&[output], "calyx", &[input], &[])?;
+            e.arg("backend", "firrtl")?;
+            Ok(())
+        },
+    );
+
     // Dahlia.
     let dahlia = bld.state("dahlia", &["fuse"]);
     let dahlia_setup = bld.setup("Dahlia compiler", |e| {
