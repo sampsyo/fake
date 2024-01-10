@@ -31,20 +31,6 @@ fn build_driver() -> Driver {
         },
     );
 
-    // Calyx-FIRRTL (move elsewhere)
-    let firrtl = bld.state("firrtl", &["fir"]);
-    bld.op(
-        "calyx-to-firrtl",
-        &[calyx_setup],
-        calyx,
-        firrtl,
-        |e, input, output| {
-            e.build_cmd(&[output], "calyx", &[input], &[])?;
-            e.arg("backend", "firrtl")?;
-            Ok(())
-        },
-    );
-
     // Dahlia.
     let dahlia = bld.state("dahlia", &["fuse"]);
     let dahlia_setup = bld.setup("Dahlia compiler", |e| {
@@ -127,7 +113,10 @@ fn build_driver() -> Driver {
     // Icarus Verilog.
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
         e.var("iverilog", "iverilog")?;
-        e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
+        e.rule(
+            "icarus-compile",
+            "$iverilog -g2012 -o $out $testbench $extra_primitives $in",
+        )?;
         Ok(())
     });
     fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
@@ -141,6 +130,7 @@ fn build_driver() -> Driver {
         // Compile the Verilog.
         let bin_name = "icarus_bin";
         e.build("icarus-compile", verilog_name, bin_name)?;
+        e.arg("extra_primitives", "")?;
 
         emit_sim_run(e, bin_name, output, trace)
     }
@@ -157,6 +147,52 @@ fn build_driver() -> Driver {
         calyx,
         vcd,
         |e, input, output| emit_icarus(e, input, output, true),
+    );
+
+    // Calyx-FIRRTL
+    let firrtl = bld.state("firrtl", &["fir"]);
+    bld.op(
+        "calyx-to-firrtl",
+        &[calyx_setup],
+        calyx,
+        firrtl,
+        |e, input, output| {
+            e.build_cmd(&[output], "calyx", &[input], &[])?;
+            e.arg("backend", "firrtl")?;
+            Ok(())
+        },
+    );
+    let firrtl_verilog_setup = bld.setup("Firrtl to Verilog compiler", |e| {
+        e.config_var("firrtl_exe", "firrtl.exe")?;
+        e.rule("firrtl", "$firrtl_exe -i $in -o $out -X sverilog")?;
+        Ok(())
+    });
+
+    bld.op(
+        "icarus-firrtl",
+        &[calyx_setup, firrtl_verilog_setup, sim_setup, icarus_setup],
+        calyx,
+        dat,
+        |e, input, output| {
+            // Generate the FIRRTL
+            let firrtl_name = "sim.fir";
+            e.build_cmd(&[firrtl_name], "calyx", &[input], &[])?;
+            e.arg("backend", "firrtl")?;
+
+            // Compile the FIRRTL into Verilog
+            let verilog_name = "sim.sv";
+            e.build_cmd(&[verilog_name], "firrtl", &[firrtl_name], &[])?;
+
+            // borrowed the below from emit_icarus
+            // Compile the Verilog.
+            let bin_name = "icarus_bin";
+            e.build("icarus-compile", verilog_name, bin_name)?;
+            e.arg(
+                "extra_primitives",
+                &format!("{}/primitives-for-firrtl.sv", e.config_val("data")?),
+            )?;
+            emit_sim_run(e, bin_name, output, false)
+        },
     );
 
     // Verilator.
