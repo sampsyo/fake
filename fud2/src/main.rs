@@ -217,15 +217,29 @@ fn build_driver() -> Driver {
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
         e.rule(
             "verilator-compile",
-            "$verilator $in $testbench --trace --binary --top-module TOP -fno-inline -Mdir $out_dir",
+            "$verilator $in $testbench $extra_primitives --trace --binary --top-module TOP -fno-inline -Mdir $out_dir",
         )?;
         Ok(())
     });
-    fn emit_verilator(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
+    fn emit_verilator(
+        e: &mut Emitter,
+        input: &str,
+        output: &str,
+        trace: bool,
+        firrtl: bool,
+    ) -> EmitResult {
         let out_dir = "verilator-out";
         let sim_bin = format!("{}/VTOP", out_dir);
         e.build("verilator-compile", input, &sim_bin)?;
         e.arg("out_dir", out_dir)?;
+        if firrtl {
+            e.arg(
+                "extra_primitives",
+                &format!("{}/primitives-for-firrtl.sv", e.config_val("data")?),
+            )?;
+        } else {
+            e.arg("extra_primitives", "")?;
+        }
 
         emit_sim_run(e, &sim_bin, output, trace)
     }
@@ -234,14 +248,30 @@ fn build_driver() -> Driver {
         &[sim_setup, verilator_setup],
         verilog,
         dat,
-        |e, input, output| emit_verilator(e, input, output, false),
+        |e, input, output| emit_verilator(e, input, output, false, false),
     );
     bld.op(
         "verilator-trace",
         &[sim_setup, verilator_setup],
         verilog,
         vcd,
-        |e, input, output| emit_verilator(e, input, output, true),
+        |e, input, output| emit_verilator(e, input, output, true, false),
+    );
+    bld.op(
+        "verilator-firrtl",
+        &[
+            calyx_setup,
+            firrtl_verilog_setup,
+            sim_setup,
+            verilator_setup,
+        ],
+        calyx,
+        dat,
+        |e, input, output| {
+            let verilog_name = "sim.sv";
+            emit_verilog_via_firrtl(e, input, verilog_name)?;
+            emit_verilator(e, verilog_name, output, false, true)
+        },
     );
 
     // Interpreter.
