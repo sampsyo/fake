@@ -108,6 +108,7 @@ impl<'a> Run<'a> {
     /// Print a GraphViz representation of the plan.
     pub fn show_dot(self) {
         println!("digraph plan {{");
+        println!("  rankdir=LR;");
         println!("  node[shape=box];");
 
         // Record the states and ops that are actually used in the plan.
