@@ -123,7 +123,6 @@ fn build_driver() -> Driver {
     fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
         let bin_name = "icarus_bin";
         e.build("icarus-compile", input, bin_name)?;
-        e.arg("extra_primitives", "")?;
         emit_sim_run(e, bin_name, output, trace)
     }
     bld.op(
@@ -225,8 +224,6 @@ fn build_driver() -> Driver {
                 "extra_primitives",
                 &format!("{}/primitives-for-firrtl.sv", e.config_val("data")?),
             )?;
-        } else {
-            e.arg("extra_primitives", "")?;
         }
 
         emit_sim_run(e, &sim_bin, output, trace)
