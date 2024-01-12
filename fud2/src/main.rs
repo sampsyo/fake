@@ -154,7 +154,7 @@ fn build_driver() -> Driver {
         |e, input, output| emit_icarus(e, input, output, true),
     );
 
-    // Calyx-FIRRTL
+    // Calyx to FIRRTL.
     let firrtl = bld.state("firrtl", &["fir"]);
     bld.op(
         "calyx-to-firrtl",
@@ -167,32 +167,14 @@ fn build_driver() -> Driver {
             Ok(())
         },
     );
+
+    // The FIRRTL compiler.
     let firrtl_verilog_setup = bld.setup("Firrtl to Verilog compiler", |e| {
         e.config_var("firrtl_exe", "firrtl.exe")?;
         e.rule("firrtl", "$firrtl_exe -i $in -o $out -X sverilog")?;
         Ok(())
     });
-
-    // Helper function for the Calyx --> FIRRTL --> System-Verilog pipeline
-    fn emit_verilog_via_firrtl(e: &mut Emitter, input: &str, output: &str) -> EmitResult {
-        // Generate the FIRRTL
-        let firrtl_name = "sim.fir";
-        e.build_cmd(&[firrtl_name], "calyx", &[input], &[])?;
-        e.arg("backend", "firrtl")?;
-
-        // Compile the FIRRTL into Verilog
-        e.build_cmd(&[output], "firrtl", &[firrtl_name], &[])?;
-
-        Ok(())
-    }
-
-    bld.op(
-        "firrtl",
-        &[calyx_setup, firrtl_verilog_setup],
-        calyx,
-        verilog,
-        emit_verilog_via_firrtl,
-    );
+    bld.rule(&[firrtl_verilog_setup], firrtl, verilog, "firrtl");
 
     // Run the FIRRTL --> System-Verilog --> Execution via Icarus-Verilog pipeline
     bld.op(
