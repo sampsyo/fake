@@ -141,14 +141,14 @@ fn build_driver() -> Driver {
     );
     bld.op(
         "icarus",
-        &[calyx_setup, sim_setup, icarus_setup],
+        &[sim_setup, icarus_setup],
         verilog_noverify,
         dat,
         |e, input, output| emit_icarus(e, input, output, false),
     );
     bld.op(
         "icarus-trace",
-        &[calyx_setup, sim_setup, icarus_setup],
+        &[sim_setup, icarus_setup],
         verilog_noverify,
         vcd,
         |e, input, output| emit_icarus(e, input, output, true),
@@ -194,15 +194,16 @@ fn build_driver() -> Driver {
         emit_verilog_via_firrtl,
     );
 
-    // Run the whole Calyx --> FIRRTL --> System-Verilog --> Execution via Icarus-Verilog pipeline
+    // Run the FIRRTL --> System-Verilog --> Execution via Icarus-Verilog pipeline
     bld.op(
         "icarus-firrtl",
         &[calyx_setup, firrtl_verilog_setup, sim_setup, icarus_setup],
-        calyx,
+        firrtl,
         dat,
         |e, input, output| {
+            // Compile FIRRTL to Verilog for simulation.
             let verilog_name = "sim.sv";
-            emit_verilog_via_firrtl(e, input, verilog_name)?;
+            e.build_cmd(&[verilog_name], "firrtl", &[input], &[])?;
 
             // borrowed the below from emit_icarus
             // Compile the Verilog.
@@ -264,17 +265,12 @@ fn build_driver() -> Driver {
     );
     bld.op(
         "verilator-firrtl",
-        &[
-            calyx_setup,
-            firrtl_verilog_setup,
-            sim_setup,
-            verilator_setup,
-        ],
-        calyx,
+        &[firrtl_verilog_setup, sim_setup, verilator_setup],
+        firrtl,
         dat,
         |e, input, output| {
             let verilog_name = "sim.sv";
-            emit_verilog_via_firrtl(e, input, verilog_name)?;
+            e.build_cmd(&[verilog_name], "firrtl", &[input], &[])?;
             emit_verilator(e, verilog_name, output, false, true)
         },
     );
