@@ -111,6 +111,7 @@ fn build_driver() -> Driver {
     }
 
     // Icarus Verilog.
+    let verilog_noverify = bld.state("verilog-noverify", &["sv"]);
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
         e.var("iverilog", "iverilog")?;
         e.rule(
@@ -120,31 +121,35 @@ fn build_driver() -> Driver {
         Ok(())
     });
     fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
-        // Compile the Calyx to Verilog. We need to do this here (rather than making the op go
-        // from Verilog) because Icarus requires the `--disable-verify` flag.
-        let verilog_name = "sim.sv";
-        e.build_cmd(&[verilog_name], "calyx", &[input], &[])?;
-        e.arg("backend", "verilog")?;
-        e.arg("args", "--disable-verify")?;
-
-        // Compile the Verilog.
         let bin_name = "icarus_bin";
-        e.build("icarus-compile", verilog_name, bin_name)?;
+        e.build("icarus-compile", input, bin_name)?;
         e.arg("extra_primitives", "")?;
-
         emit_sim_run(e, bin_name, output, trace)
     }
     bld.op(
+        "calyx-noverify",
+        &[calyx_setup],
+        calyx,
+        verilog_noverify,
+        |e, input, output| {
+            // Icarus requires a special --disable-verify version of Calyx code.
+            e.build_cmd(&[output], "calyx", &[input], &[])?;
+            e.arg("backend", "verilog")?;
+            e.arg("args", "--disable-verify")?;
+            Ok(())
+        },
+    );
+    bld.op(
         "icarus",
         &[calyx_setup, sim_setup, icarus_setup],
-        calyx,
+        verilog_noverify,
         dat,
         |e, input, output| emit_icarus(e, input, output, false),
     );
     bld.op(
         "icarus-trace",
         &[calyx_setup, sim_setup, icarus_setup],
-        calyx,
+        verilog_noverify,
         vcd,
         |e, input, output| emit_icarus(e, input, output, true),
     );
