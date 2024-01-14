@@ -55,6 +55,7 @@ fn build_driver() -> Driver {
     // Shared machinery for RTL simulators.
     let dat = bld.state("dat", &["json"]);
     let vcd = bld.state("vcd", &["vcd"]);
+    let simulator = bld.state("sim", &["exe"]);
     let sim_setup = bld.setup("RTL simulation", |e| {
         // Data conversion to and from JSON.
         e.config_var_or("python", "python", "python3")?;
@@ -88,43 +89,33 @@ fn build_driver() -> Driver {
 
         Ok(())
     });
-    fn emit_sim_run(e: &mut Emitter, bin: &str, output: &str, trace: bool) -> EmitResult {
-        // Run the simulation.
-        if trace {
-            e.build_cmd(&["sim.log", output], "sim-run", &[bin, "$datadir"], &[])?;
-        } else {
-            e.build_cmd(&["sim.log"], "sim-run", &[bin, "$datadir"], &[])?;
-        }
-        e.arg("bin", bin)?;
-        if trace {
-            e.arg("args", &format!("+NOTRACE=0 +OUT={}", output))?;
-        } else {
+    bld.op(
+        "simulate",
+        &[sim_setup],
+        simulator,
+        dat,
+        |e, input, output| {
+            e.build_cmd(&["sim.log"], "sim-run", &[input, "$datadir"], &[])?;
+            e.arg("bin", input)?;
             e.arg("args", "+NOTRACE=1")?;
-        }
-
-        // Convert the output data (only in non-VCD mode).
-        if !trace {
             e.build_cmd(&[output], "json-data", &["$datadir", "sim.log"], &[])?;
-        }
-
+            Ok(())
+        },
+    );
+    bld.op("trace", &[sim_setup], simulator, vcd, |e, input, output| {
+        e.build_cmd(&["sim.log", output], "sim-run", &[input, "$datadir"], &[])?;
+        e.arg("bin", input)?;
+        e.arg("args", &format!("+NOTRACE=0 +OUT={}", output))?;
         Ok(())
-    }
+    });
 
     // Icarus Verilog.
     let verilog_noverify = bld.state("verilog-noverify", &["sv"]);
     let icarus_setup = bld.setup("Icarus Verilog", |e| {
         e.var("iverilog", "iverilog")?;
-        e.rule(
-            "icarus-compile",
-            "$iverilog -g2012 -o $out $testbench $extra_primitives $in",
-        )?;
+        e.rule("icarus-compile", "$iverilog -g2012 -o $out $testbench $in")?;
         Ok(())
     });
-    fn emit_icarus(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
-        let bin_name = "icarus_bin";
-        e.build("icarus-compile", input, bin_name)?;
-        emit_sim_run(e, bin_name, output, trace)
-    }
     bld.op(
         "calyx-noverify",
         &[calyx_setup],
@@ -142,15 +133,11 @@ fn build_driver() -> Driver {
         "icarus",
         &[sim_setup, icarus_setup],
         verilog_noverify,
-        dat,
-        |e, input, output| emit_icarus(e, input, output, false),
-    );
-    bld.op(
-        "icarus-trace",
-        &[sim_setup, icarus_setup],
-        verilog_noverify,
-        vcd,
-        |e, input, output| emit_icarus(e, input, output, true),
+        simulator,
+        |e, input, output| {
+            e.build("icarus-compile", input, output)?;
+            Ok(())
+        },
     );
 
     // Calyx to FIRRTL.
@@ -180,17 +167,21 @@ fn build_driver() -> Driver {
 
         Ok(())
     });
+    fn firrtl_compile(e: &mut Emitter, input: &str, output: &str) -> EmitResult {
+        let tmp_verilog = "partial.sv";
+        e.build_cmd(&[tmp_verilog], "firrtl", &[input], &[])?;
+        e.build_cmd(&[output], "add-firrtl-prims", &[tmp_verilog], &[])?;
+        Ok(())
+    }
+    bld.op("firrtl", &[firrtl_setup], firrtl, verilog, firrtl_compile);
+    // This is a bit of a hack, but the Icarus-friendly "noverify" state is identical for this path
+    // (since FIRRTL compilation doesn't come with verification).
     bld.op(
-        "firrtl",
+        "firrtl-noverify",
         &[firrtl_setup],
         firrtl,
-        verilog,
-        |e, input, output| {
-            let tmp_verilog = "partial.sv";
-            e.build_cmd(&[tmp_verilog], "firrtl", &[input], &[])?;
-            e.build_cmd(&[output], "add-firrtl-prims", &[tmp_verilog], &[])?;
-            Ok(())
-        },
+        verilog_noverify,
+        firrtl_compile,
     );
 
     // Verilator.
@@ -199,31 +190,24 @@ fn build_driver() -> Driver {
         e.config_var_or("cycle_limit", "sim.cycle_limit", "500000000")?;
         e.rule(
             "verilator-compile",
-            "$verilator $in $testbench $extra_primitives --trace --binary --top-module TOP -fno-inline -Mdir $out_dir",
+            "$verilator $in $testbench --trace --binary --top-module TOP -fno-inline -Mdir $out_dir",
         )?;
+        e.rule("cp", "cp $in $out")?;
         Ok(())
     });
-    fn emit_verilator(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
-        let out_dir = "verilator-out";
-        let sim_bin = format!("{}/VTOP", out_dir);
-        e.build("verilator-compile", input, &sim_bin)?;
-        e.arg("out_dir", out_dir)?;
-
-        emit_sim_run(e, &sim_bin, output, trace)
-    }
     bld.op(
         "verilator",
         &[sim_setup, verilator_setup],
         verilog,
-        dat,
-        |e, input, output| emit_verilator(e, input, output, false),
-    );
-    bld.op(
-        "verilator-trace",
-        &[sim_setup, verilator_setup],
-        verilog,
-        vcd,
-        |e, input, output| emit_verilator(e, input, output, true),
+        simulator,
+        |e, input, output| {
+            let out_dir = "verilator-out";
+            let sim_bin = format!("{}/VTOP", out_dir);
+            e.build("verilator-compile", input, &sim_bin)?;
+            e.arg("out_dir", out_dir)?;
+            e.build("cp", &sim_bin, output)?;
+            Ok(())
+        },
     );
 
     // Interpreter.
