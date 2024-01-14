@@ -168,33 +168,28 @@ fn build_driver() -> Driver {
     );
 
     // The FIRRTL compiler.
-    let firrtl_verilog_setup = bld.setup("Firrtl to Verilog compiler", |e| {
+    let firrtl_setup = bld.setup("Firrtl to Verilog compiler", |e| {
         e.config_var("firrtl_exe", "firrtl.exe")?;
         e.rule("firrtl", "$firrtl_exe -i $in -o $out -X sverilog")?;
+
+        e.var(
+            "primitives-for-firrtl",
+            &format!("{}/primitives-for-firrtl.sv", e.config_val("data")?),
+        )?;
+        e.rule("add-firrtl-prims", "cat $primitives-for-firrtl $in > $out")?;
+
         Ok(())
     });
-    bld.rule(&[firrtl_verilog_setup], firrtl, verilog, "firrtl");
-
-    // Run the FIRRTL --> System-Verilog --> Execution via Icarus-Verilog pipeline
     bld.op(
-        "icarus-firrtl",
-        &[calyx_setup, firrtl_verilog_setup, sim_setup, icarus_setup],
+        "firrtl",
+        &[firrtl_setup],
         firrtl,
-        dat,
+        verilog,
         |e, input, output| {
-            // Compile FIRRTL to Verilog for simulation.
-            let verilog_name = "sim.sv";
-            e.build_cmd(&[verilog_name], "firrtl", &[input], &[])?;
-
-            // borrowed the below from emit_icarus
-            // Compile the Verilog.
-            let bin_name = "icarus_bin";
-            e.build("icarus-compile", verilog_name, bin_name)?;
-            e.arg(
-                "extra_primitives",
-                &format!("{}/primitives-for-firrtl.sv", e.config_val("data")?),
-            )?;
-            emit_sim_run(e, bin_name, output, false)
+            let tmp_verilog = "partial.sv";
+            e.build_cmd(&[tmp_verilog], "firrtl", &[input], &[])?;
+            e.build_cmd(&[output], "add-firrtl-prims", &[tmp_verilog], &[])?;
+            Ok(())
         },
     );
 
@@ -208,23 +203,11 @@ fn build_driver() -> Driver {
         )?;
         Ok(())
     });
-    fn emit_verilator(
-        e: &mut Emitter,
-        input: &str,
-        output: &str,
-        trace: bool,
-        firrtl: bool,
-    ) -> EmitResult {
+    fn emit_verilator(e: &mut Emitter, input: &str, output: &str, trace: bool) -> EmitResult {
         let out_dir = "verilator-out";
         let sim_bin = format!("{}/VTOP", out_dir);
         e.build("verilator-compile", input, &sim_bin)?;
         e.arg("out_dir", out_dir)?;
-        if firrtl {
-            e.arg(
-                "extra_primitives",
-                &format!("{}/primitives-for-firrtl.sv", e.config_val("data")?),
-            )?;
-        }
 
         emit_sim_run(e, &sim_bin, output, trace)
     }
@@ -233,25 +216,14 @@ fn build_driver() -> Driver {
         &[sim_setup, verilator_setup],
         verilog,
         dat,
-        |e, input, output| emit_verilator(e, input, output, false, false),
+        |e, input, output| emit_verilator(e, input, output, false),
     );
     bld.op(
         "verilator-trace",
         &[sim_setup, verilator_setup],
         verilog,
         vcd,
-        |e, input, output| emit_verilator(e, input, output, true, false),
-    );
-    bld.op(
-        "verilator-firrtl",
-        &[firrtl_verilog_setup, sim_setup, verilator_setup],
-        firrtl,
-        dat,
-        |e, input, output| {
-            let verilog_name = "sim.sv";
-            e.build_cmd(&[verilog_name], "firrtl", &[input], &[])?;
-            emit_verilator(e, verilog_name, output, false, true)
-        },
+        |e, input, output| emit_verilator(e, input, output, true),
     );
 
     // Interpreter.
