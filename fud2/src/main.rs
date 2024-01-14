@@ -330,9 +330,9 @@ fn build_driver() -> Driver {
         // "Pre-sim" and "post-sim" scripts for simulation.
         e.rule("echo", "echo $contents > $out")?;
         e.build_cmd(&["pre_sim.tcl"], "echo", &[""], &[""])?;
-        e.arg("contents", "open_vcd\\nlog_vcd *\\n")?;
+        e.arg("contents", "open_vcd\\\\nlog_vcd *\\\\n")?;
         e.build_cmd(&["post_sim.tcl"], "echo", &[""], &[""])?;
-        e.arg("contents", "close_vcd\\n")?;
+        e.arg("contents", "close_vcd\\\\n")?;
 
         Ok(())
     });
