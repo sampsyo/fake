@@ -184,6 +184,20 @@ fn build_driver() -> Driver {
         firrtl_compile,
     );
 
+    // primitive-inst backend (FIXME: rename)
+    let json = bld.state("json", &["json"]);
+    bld.op(
+        "primitive-instantiations",
+        &[calyx_setup],
+        calyx,
+        json,
+        |e, input, output| {
+            e.build_cmd(&[output], "calyx", &[input], &[])?;
+            e.arg("backend", "primitive-inst")?;
+            Ok(())
+        },
+    );
+
     // Verilator.
     let verilator_setup = bld.setup("Verilator", |e| {
         e.config_var_or("verilator", "verilator.exe", "verilator")?;
