@@ -185,12 +185,12 @@ fn build_driver() -> Driver {
     );
 
     // primitive-uses backend
-    let json = bld.state("json", &["json"]);
+    let primitive_uses_json = bld.state("primitive-uses-json", &["json"]);
     bld.op(
         "primitive-uses",
         &[calyx_setup],
         calyx,
-        json,
+        primitive_uses_json,
         |e, input, output| {
             e.build_cmd(&[output], "calyx", &[input], &[])?;
             e.arg("backend", "primitive-uses")?;
