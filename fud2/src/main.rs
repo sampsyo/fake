@@ -184,16 +184,16 @@ fn build_driver() -> Driver {
         firrtl_compile,
     );
 
-    // primitive-inst backend (FIXME: rename)
+    // primitive-uses backend
     let json = bld.state("json", &["json"]);
     bld.op(
-        "primitive-instantiations",
+        "primitive-uses",
         &[calyx_setup],
         calyx,
         json,
         |e, input, output| {
             e.build_cmd(&[output], "calyx", &[input], &[])?;
-            e.arg("backend", "primitive-inst")?;
+            e.arg("backend", "primitive-uses")?;
             Ok(())
         },
     );
